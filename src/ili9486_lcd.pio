@@ -1,0 +1,43 @@
+.program ili9486_lcd
+
+; Shifts 8 bits of data to the LCD data pins d0, d1, d2, d3, d4, d5, d6, d7
+; Use set pin (for ENABLE/WR) to pulse.
+
+set pindirs, 1              ; set ENABLE/WR pin (set pins) as output
+set pins, 0                 ; initialise ENABLE/WR pin to 0
+.wrap_target
+    pull block              ; wait for data
+    out pins, 8             ; shift last 8 bits from OSR to LCD data pins
+    set pins, 1             ; set ENABLE/WR pin HIGH
+    set pins, 0             ; set ENABLE/WR pin LOW
+.wrap
+
+
+% c-sdk {
+
+static inline void ili9486_lcd_program_init(PIO pio, uint sm, uint offset, uint data_pin_offset, uint wr_pin) {
+
+    pio_sm_set_enabled(pio, sm, false);
+    pio_sm_clear_fifos(pio, sm);
+    pio_sm_restart(pio, sm);
+
+    pio_sm_config c = ili9486_lcd_program_get_default_config(offset);
+
+    for (uint i = 0; i < 8; i++)
+    {
+        pio_gpio_init(pio, data_pin_offset+i);
+    }
+    pio_gpio_init(pio, wr_pin);
+
+    sm_config_set_out_pins(&c, data_pin_offset, 8);
+    sm_config_set_out_shift(&c, true, true, 8);
+
+    sm_config_set_set_pins(&c, wr_pin, 1);
+    pio_sm_set_consecutive_pindirs(pio, sm, data_pin_offset, 8, true);
+
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+
+
+%}
