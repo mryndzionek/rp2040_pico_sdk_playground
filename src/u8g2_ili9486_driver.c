@@ -98,7 +98,7 @@ static uint8_t _gpio_and_delay(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void 
             printf("Failed to add LCD PIO program\n");
         }
 
-        gpio_init(10);
+        gpio_init(LCD_RESET_PIN);
         gpio_set_dir(LCD_RESET_PIN, GPIO_OUT);
 
         gpio_init(LCD_CS_PIN);
@@ -206,7 +206,7 @@ static uint8_t _disp_byte(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void *arg_
             b = *data;
             data++;
             arg_int--;
-            pio_sm_put_blocking(LCD_PIO, LCD_SM, b);
+            pio_sm_put_blocking(LCD_PIO, LCD_SM, b << 8);
         }
         break;
 
@@ -255,6 +255,7 @@ static uint8_t _disp_handle(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void *ar
         uint8_t c = ((u8x8_tile_t *)arg_ptr)->cnt;
         uint8_t *ptr = ((u8x8_tile_t *)arg_ptr)->tile_ptr;
         uint16_t y2 = y1 + 1;
+
         y1 *= 8;
         y2 *= 8;
         y2 -= 1;
@@ -281,21 +282,11 @@ static uint8_t _disp_handle(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void *ar
         for (size_t i = 0; i < c * 8; i++)
         {
             uint8_t b = ptr[i];
-
-            for (uint8_t j = 0; j < 8; j++)
-            {
-                if (b & (1 << j))
-                {
-                    pio_sm_put_blocking(LCD_PIO, LCD_SM, ON_COLOR_L);
-                    pio_sm_put_blocking(LCD_PIO, LCD_SM, ON_COLOR_H);
-                }
-                else
-                {
-                    pio_sm_put_blocking(LCD_PIO, LCD_SM, OFF_COLOR_L);
-                    pio_sm_put_blocking(LCD_PIO, LCD_SM, OFF_COLOR_H);
-                }
-            }
+            pio_sm_put_blocking(LCD_PIO, LCD_SM, 1 | (b << 8));
         }
+
+        // Wait for the FIFO to drain
+        sleep_us(2);
 
         u8x8_cad_EndTransfer(u8x8);
     }

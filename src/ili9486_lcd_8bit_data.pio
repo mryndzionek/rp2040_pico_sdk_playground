@@ -3,10 +3,41 @@
 ; Shifts 8 bits of data to the LCD data pins d0, d1, d2, d3, d4, d5, d6, d7
 ; Use set pin (for ENABLE/WR) to pulse.
 
+.define WR_DELAY 6
+
 .wrap_target
-    set pins 0              ; set ENABLE/WR pin LOW
-    out pins, 8             ; shift last 8 bits from OSR to LCD data pins
-    set pins 1              ; set ENABLE/WR pin HIGH
+start:
+    out x, 8
+    jmp !x data
+    set y 7
+send_bit:
+    out x, 1
+    jmp !x color_off
+color_on:
+    set pins 0
+    set x 7
+    mov pins x
+    set pins 1 [WR_DELAY]
+    set pins 0
+    mov isr x
+    in NULL 5
+    mov pins isr
+    set pins 1
+    jmp y-- send_bit
+    jmp start
+color_off:
+    set pins 0
+    mov pins NULL
+    set pins 1 [WR_DELAY]
+    set pins 0
+    mov pins NULL
+    set pins 1
+    jmp y-- send_bit
+    jmp start
+data:
+    set pins 0
+    out pins, 8
+    set pins 1
 .wrap
 
 
@@ -27,7 +58,7 @@ static inline void ili9486_lcd_8bit_data_program_init(PIO pio, uint sm, uint off
     pio_gpio_init(pio, wr_pin);
 
     sm_config_set_out_pins(&c, data_pin_offset, 8);
-    sm_config_set_out_shift(&c, true, true, 8);
+    sm_config_set_out_shift(&c, true, true, 16);
 
     sm_config_set_set_pins(&c, wr_pin, 1);
     pio_sm_set_consecutive_pindirs(pio, sm, data_pin_offset, 8, true);
