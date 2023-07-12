@@ -7,7 +7,7 @@
 #include "hardware/pwm.h"
 #include "hardware/pio.h"
 
-#include "ili9486_lcd.pio.h"
+#include "ili9486_lcd_8bit_data.pio.h"
 
 #define BACKLIGHT_PIN (15)
 
@@ -88,10 +88,10 @@ static uint8_t _gpio_and_delay(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void 
     {
     case U8X8_MSG_GPIO_AND_DELAY_INIT:
     {
-        if (pio_can_add_program(LCD_PIO, &ili9486_lcd_program))
+        if (pio_can_add_program(LCD_PIO, &ili9486_lcd_8bit_data_program))
         {
-            uint offset = pio_add_program(LCD_PIO, &ili9486_lcd_program);
-            ili9486_lcd_program_init(LCD_PIO, LCD_SM, offset, LCD_D0_PIN, LCD_WR_PIN);
+            uint offset = pio_add_program(LCD_PIO, &ili9486_lcd_8bit_data_program);
+            ili9486_lcd_8bit_data_program_init(LCD_PIO, LCD_SM, offset, LCD_D0_PIN, LCD_WR_PIN);
         }
         else
         {

@@ -29,7 +29,7 @@ add_executable(rpi_lcd_test
         src/u8g2_ili9486_driver.c
         )
 
-pico_generate_pio_header(rpi_lcd_test ${CMAKE_CURRENT_LIST_DIR}/src/ili9486_lcd.pio)
+pico_generate_pio_header(rpi_lcd_test ${CMAKE_CURRENT_LIST_DIR}/src/ili9486_lcd_8bit_data.pio)
 
 target_link_libraries(rpi_lcd_test
         pico_stdlib

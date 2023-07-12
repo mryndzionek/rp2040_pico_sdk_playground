@@ -1,4 +1,4 @@
-.program ili9486_lcd
+.program ili9486_lcd_8bit_data
 
 ; Shifts 8 bits of data to the LCD data pins d0, d1, d2, d3, d4, d5, d6, d7
 ; Use set pin (for ENABLE/WR) to pulse.
@@ -12,13 +12,13 @@
 
 % c-sdk {
 
-static inline void ili9486_lcd_program_init(PIO pio, uint sm, uint offset, uint data_pin_offset, uint wr_pin) {
+static inline void ili9486_lcd_8bit_data_program_init(PIO pio, uint sm, uint offset, uint data_pin_offset, uint wr_pin) {
 
     pio_sm_set_enabled(pio, sm, false);
     pio_sm_clear_fifos(pio, sm);
     pio_sm_restart(pio, sm);
 
-    pio_sm_config c = ili9486_lcd_program_get_default_config(offset);
+    pio_sm_config c = ili9486_lcd_8bit_data_program_get_default_config(offset);
 
     for (uint i = 0; i < 8; i++)
     {
