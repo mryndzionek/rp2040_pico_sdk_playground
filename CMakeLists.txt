@@ -35,6 +35,8 @@ target_link_libraries(rpi_lcd_test
         pico_stdlib
         hardware_pwm
         hardware_pio
+        hardware_dma
+        hardware_irq
         u8g2)
 
 pico_add_extra_outputs(rpi_lcd_test)

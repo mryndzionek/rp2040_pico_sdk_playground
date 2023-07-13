@@ -7,36 +7,41 @@
 
 .wrap_target
 start:
-    out x, 8
-    jmp !x data
+    pull
+    out x 16                   ; first 16-bit are intepreted as length of the xfer           
+    jmp !x send_data           ; zero is a special value siginfying single 8-bit xfer
+send_colors:                   ; non-zero values are (DMA) xfers of the display color data
+    mov isr x                  ; ISR is used to store the xfer counter
     set y 7
-send_bit:
-    out x, 1
-    jmp !x color_off
-color_on:
+    pull
+next_bit:
     set pins 0
-    set x 7
+    out x, 1
+    jmp !x off_send            ; every bit is expanded to 16-bit color code
+on_send:
+    set x 7                    ; encoding color green (0xE007)
     mov pins x
     set pins 1 [WR_DELAY]
     set pins 0
-    mov isr x
-    in NULL 5
-    mov pins isr
-    set pins 1
-    jmp y-- send_bit
-    jmp start
-color_off:
-    set pins 0
-    mov pins NULL
+    set x 31
+    mov x !x
+    mov pins x
+    jmp send_end
+off_send:
+    mov pins x
     set pins 1 [WR_DELAY]
     set pins 0
-    mov pins NULL
+    mov pins x
+send_end:
     set pins 1
-    jmp y-- send_bit
+    jmp y-- next_bit
+    mov x isr
+    jmp x-- send_colors
     jmp start
-data:
+send_data:
+    pull
     set pins 0
-    out pins, 8
+    out pins 8
     set pins 1
 .wrap
 
@@ -58,7 +63,6 @@ static inline void ili9486_lcd_8bit_data_program_init(PIO pio, uint sm, uint off
     pio_gpio_init(pio, wr_pin);
 
     sm_config_set_out_pins(&c, data_pin_offset, 8);
-    sm_config_set_out_shift(&c, true, true, 16);
 
     sm_config_set_set_pins(&c, wr_pin, 1);
     pio_sm_set_consecutive_pindirs(pio, sm, data_pin_offset, 8, true);
