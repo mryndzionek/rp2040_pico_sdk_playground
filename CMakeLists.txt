@@ -15,7 +15,7 @@ file(GLOB U8G2_SRCS
      "external/u8g2/csrc/*.c"
 )
 
-add_compile_options(-fdata-sections)
+add_compile_options(-Wall -Werror -fdata-sections)
 
 include_directories(include external/u8g2/csrc/)
 

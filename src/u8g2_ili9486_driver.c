@@ -216,7 +216,7 @@ static uint8_t _disp_cad(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void *arg_p
 
 static uint8_t _disp_byte(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void *arg_ptr)
 {
-    uint8_t i, b;
+    uint8_t b;
     uint8_t *data;
 
     switch (msg)
