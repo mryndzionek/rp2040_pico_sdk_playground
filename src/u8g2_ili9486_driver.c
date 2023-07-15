@@ -106,14 +106,14 @@ static uint8_t _gpio_and_delay(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void 
         dma_claim_mask(DMA_CHANNEL_MASK);
         dma_channel_config channel_config = dma_channel_get_default_config(DMA_CHANNEL);
         channel_config_set_dreq(&channel_config, pio_get_dreq(LCD_PIO, LCD_SM, true));
-        channel_config_set_transfer_data_size(&channel_config, DMA_SIZE_8);
+        channel_config_set_transfer_data_size(&channel_config, DMA_SIZE_32);
         channel_config_set_read_increment(&channel_config, true);
 
         dma_channel_configure(DMA_CHANNEL,
                               &channel_config,
                               &LCD_PIO->txf[LCD_SM],
                               NULL,
-                              480,
+                              480 / 4,
                               false);
 
         // irq_set_exclusive_handler(DMA_IRQ_0, dma_complete_handler);
@@ -300,13 +300,10 @@ static uint8_t _disp_handle(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void *ar
         u8x8_cad_SendCmd(u8x8, 0x2C);
 
         u8x8_byte_SetDC(u8x8, 1);
-        pio_sm_put_blocking(LCD_PIO, LCD_SM, (c * 8) - 1);
+        pio_sm_put_blocking(LCD_PIO, LCD_SM, (c * 8 / 4) - 1);
 
         dma_channel_set_read_addr(DMA_CHANNEL, (void *)ptr, true);
-        dma_channel_wait_for_finish_blocking(DMA_CHANNEL);
-
-        // Wait for the FIFO to drain
-        sleep_us(2);
+        pio_sm_get_blocking(LCD_PIO, LCD_SM);
 
         u8x8_cad_EndTransfer(u8x8);
     }

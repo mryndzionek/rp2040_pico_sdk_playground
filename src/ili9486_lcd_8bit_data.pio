@@ -10,9 +10,8 @@ start:
     pull
     out x 16                   ; first 16-bit are intepreted as length of the xfer           
     jmp !x send_data           ; zero is a special value siginfying single 8-bit xfer
+    mov y x
 send_colors:                   ; non-zero values are (DMA) xfers of the display color data
-    mov isr x                  ; ISR is used to store the xfer counter
-    set y 7
     pull
 next_bit:
     set pins 0
@@ -34,9 +33,11 @@ off_send:
     mov pins x
 send_end:
     set pins 1
-    jmp y-- next_bit
-    mov x isr
-    jmp x-- send_colors
+    jmp !osre next_bit
+    jmp y-- send_colors
+    set x 1
+    mov isr x
+    push
     jmp start
 send_data:
     pull
