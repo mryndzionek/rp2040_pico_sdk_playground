@@ -15,7 +15,7 @@ file(GLOB U8G2_SRCS
      "external/u8g2/csrc/*.c"
 )
 
-add_compile_options(-Wall -Werror -fdata-sections)
+add_compile_options(-Wall -Werror -fdata-sections -ffunction-sections)
 
 include_directories(include external/u8g2/csrc/)
 
@@ -40,6 +40,19 @@ target_link_libraries(rpi_lcd_test
         u8g2)
 
 pico_add_extra_outputs(rpi_lcd_test)
+
+add_executable(rpi_ws2812_lamp
+        src/rpi_ws2812_lamp.c
+        )
+
+pico_generate_pio_header(rpi_ws2812_lamp ${CMAKE_CURRENT_LIST_DIR}/src/ws2812.pio)
+
+target_link_libraries(rpi_ws2812_lamp
+        pico_stdlib
+        hardware_pio
+        )
+
+pico_add_extra_outputs(rpi_ws2812_lamp)
 
 
 
