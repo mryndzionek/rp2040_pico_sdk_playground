@@ -9,8 +9,7 @@
 
 #include "ws2812.pio.h"
 
-#define BUTTON_1_GPIO (16)
-#define BUTTON_2_GPIO (17)
+#define BUTTON_1_GPIO (17)
 
 #define IS_RGBW false
 #define NUM_PIXELS (64 * 4)
@@ -31,15 +30,20 @@ typedef enum
     ev_button_1_long_press,
     ev_button_1_long_release,
     ev_button_1_discr_alarm,
-    ev_button_2_press,
-    ev_button_2_release,
-    ev_button_2_short_press,
-    ev_button_2_long_press,
-    ev_button_2_long_release,
-    ev_button_2_discr_alarm,
     ev_tick,
     ev_sleep_alarm,
 } event_e;
+
+static char *event_to_str[] = {
+    "ev_button_1_press",
+    "ev_button_1_release",
+    "ev_button_1_short_press",
+    "ev_button_1_long_press",
+    "ev_button_1_long_release",
+    "ev_button_1_discr_alarm",
+    "ev_tick",
+    "ev_sleep_alarm",
+};
 
 typedef struct
 {
@@ -49,6 +53,7 @@ typedef struct
         struct
         {
             size_t count;
+            bool with_hold;
         } short_press;
     };
 } event_t;
@@ -57,7 +62,6 @@ typedef enum
 {
     state_idle = 0,
     state_color_adjust,
-    state_brightness_pre_adjust,
     state_sleep_ack,
     state_brightness_adjust,
 } state_t;
@@ -90,26 +94,25 @@ typedef struct
 typedef struct
 {
     uint16_t H;
-    double S;
-    double V;
+    float S;
+    float V;
 } hsv_t;
 
 typedef enum
 {
-    idle_mode_hsv = 0,
-    idle_mode_off,
+    idle_mode_off = 0,
     idle_mode_red,
-    idle_mode_blue,
     idle_mode_green,
+    idle_mode_blue,
     idle_mode_white,
     idle_mode_max,
 } idle_mode_e;
 
 static queue_t event_queue;
 
-static rgb_t HSVToRGB(hsv_t hsv)
+static rgb_t hsv_to_rgb(hsv_t hsv)
 {
-    double r = 0, g = 0, b = 0;
+    float r = 0, g = 0, b = 0;
 
     if (hsv.S == 0)
     {
@@ -120,7 +123,7 @@ static rgb_t HSVToRGB(hsv_t hsv)
     else
     {
         int i;
-        double f, p, q, t, H;
+        float f, p, q, t, H;
 
         hsv.H %= 360;
         if (hsv.H == 360)
@@ -175,13 +178,11 @@ static rgb_t HSVToRGB(hsv_t hsv)
         }
     }
 
-    rgb_t rgb = {
+    return (rgb_t){
         .R = r * 255,
         .G = g * 255,
         .B = b * 255,
     };
-
-    return rgb;
 }
 
 static inline void put_pixel(uint32_t pixel_grb)
@@ -238,7 +239,7 @@ static void debounce(debouncer_t *deb)
 {
     bool ret;
 
-    if (!gpio_get(deb->gpio_num))
+    if (gpio_get(deb->gpio_num))
     {
         if (deb->count < 4)
         {
@@ -266,6 +267,8 @@ static void debounce(debouncer_t *deb)
 
 static void discriminate_input(discriminator_t *discr, bool input)
 {
+    discr->short_event.short_press.with_hold = input;
+
     if (discr->active)
     {
         bool ret;
@@ -325,8 +328,25 @@ static void discriminate_alarm(discriminator_t *discr)
     {
         ret = queue_try_add(&event_queue, &discr->short_event);
         hard_assert(ret);
-        discr->active = false;
+        if (!discr->short_event.short_press.with_hold)
+        {
+            discr->active = false;
+        }
         discr->short_event.short_press.count = 0;
+    }
+}
+
+static void debug_event(event_t const *const ev)
+{
+    if (ev->tag == ev_button_1_short_press)
+    {
+        printf("Event: %s, count: %d %d\n", event_to_str[ev->tag],
+               ev->short_press.count,
+               ev->short_press.with_hold);
+    }
+    else
+    {
+        printf("Event: %s\n", event_to_str[ev->tag]);
     }
 }
 
@@ -339,11 +359,9 @@ int main()
     setup_default_uart();
     printf("WS2812 lamp\n");
     printf("LED data pin: %d\n", WS2812_PIN);
-    printf("Button pins: %d %d\n", BUTTON_1_GPIO, BUTTON_2_GPIO);
+    printf("Button pin: %d\n", BUTTON_1_GPIO);
 
     queue_init(&event_queue, sizeof(event_t), FIFO_LENGTH);
-    gpio_pull_up(BUTTON_1_GPIO);
-    gpio_pull_up(BUTTON_2_GPIO);
 
     PIO pio = pio0;
     int sm = 0;
@@ -351,9 +369,8 @@ int main()
 
     ws2812_program_init(pio, sm, offset, WS2812_PIN, 800000, IS_RGBW);
 
-    hsv_t hsv = (hsv_t){0, 1.0, 0.5};
-    rgb_t rgb = HSVToRGB(hsv);
-    update_leds_rgb(rgb);
+    hsv_t hsv = (hsv_t){0, 1.0, 1.0};
+    update_leds_rgb(hsv_to_rgb(hsv));
 
     event_t event;
     repeating_timer_t tick_timer;
@@ -361,7 +378,7 @@ int main()
     alarm_id_t alarm_id = -1;
     uint8_t ack_repeat = 0;
     size_t count = 0;
-    idle_mode_e idle_mode = idle_mode_hsv;
+    idle_mode_e idle_mode = idle_mode_red;
 
     debouncer_t button_1_deb = {
         .off_event = {.tag = ev_button_1_release},
@@ -371,26 +388,12 @@ int main()
     };
 
     discriminator_t button_1_discr = {
-        .short_event = {.tag = ev_button_1_short_press, .short_press.count = 0},
+        .short_event = {.tag = ev_button_1_short_press,
+                        .short_press.count = 0,
+                        .short_press.with_hold = false},
         .long_event_on = {.tag = ev_button_1_long_press},
         .long_event_off = {.tag = ev_button_1_long_release},
         .alarm_event = {.tag = ev_button_1_discr_alarm},
-        .alarm_id = -1,
-        .active = false,
-    };
-
-    debouncer_t button_2_deb = {
-        .off_event = {.tag = ev_button_2_release},
-        .on_event = {.tag = ev_button_2_press},
-        .count = 0,
-        .gpio_num = BUTTON_2_GPIO,
-    };
-
-    discriminator_t button_2_discr = {
-        .short_event = {.tag = ev_button_2_short_press, .short_press.count = 0},
-        .long_event_on = {.tag = ev_button_2_long_press},
-        .long_event_off = {.tag = ev_button_2_long_release},
-        .alarm_event = {.tag = ev_button_2_discr_alarm},
         .alarm_id = -1,
         .active = false,
     };
@@ -401,17 +404,23 @@ int main()
     while (1)
     {
         queue_remove_blocking(&event_queue, &event);
+
+        if (event.tag != ev_tick)
+        {
+            debug_event(&event);
+        }
+
         switch (event.tag)
         {
         case ev_sleep_alarm:
-            rgb = (rgb_t){0x00, 0x00, 0x00};
-            update_leds_rgb(rgb);
+            hsv = (hsv_t){0, 0.0, 0.0};
+            update_leds_rgb(hsv_to_rgb(hsv));
             alarm_id = -1;
+            idle_mode = idle_mode_off;
             break;
 
         case ev_tick:
             debounce(&button_1_deb);
-            debounce(&button_2_deb);
             break;
 
         case ev_button_1_press:
@@ -419,17 +428,8 @@ int main()
             discriminate_input(&button_1_discr, event.tag == ev_button_1_press);
             break;
 
-        case ev_button_2_press:
-        case ev_button_2_release:
-            discriminate_input(&button_2_discr, event.tag == ev_button_2_press);
-            break;
-
         case ev_button_1_discr_alarm:
             discriminate_alarm(&button_1_discr);
-            break;
-
-        case ev_button_2_discr_alarm:
-            discriminate_alarm(&button_2_discr);
             break;
 
         default:
@@ -442,73 +442,78 @@ int main()
             switch (event.tag)
             {
             case ev_button_1_long_press:
-                state = state_color_adjust;
-                idle_mode = idle_mode_hsv;
+                state = state_brightness_adjust;
                 break;
 
             case ev_button_1_short_press:
-                if (event.short_press.count == 2)
+                switch (event.short_press.count)
                 {
-                    state = state_sleep_ack;
-                    count = 0;
-
-                    update_leds_rgb((rgb_t){0x00, 0x00, 0x00});
-
-                    if (alarm_id >= 0)
+                case 1:
+                    if (event.short_press.with_hold)
                     {
-                        cancel_alarm(alarm_id);
-                        alarm_id = -1;
-                        ack_repeat = 2;
+                        state = state_color_adjust;
                     }
                     else
                     {
-                        alarm_id = add_alarm_in_ms(SLEEP_TIMEOUT_MS, alarm_callback, NULL, false);
-                        hard_assert(ret);
-                        ack_repeat = 0;
+                        state = state_sleep_ack;
+                        count = 0;
+
+                        update_leds_rgb((rgb_t){0x00, 0x00, 0x00});
+
+                        if (alarm_id >= 0)
+                        {
+                            cancel_alarm(alarm_id);
+                            alarm_id = -1;
+                            ack_repeat = 2;
+                        }
+                        else
+                        {
+                            alarm_id = add_alarm_in_ms(SLEEP_TIMEOUT_MS, alarm_callback, NULL, false);
+                            hard_assert(ret);
+                            ack_repeat = 0;
+                        }
                     }
-                }
-                break;
+                    break;
 
-            case ev_button_2_long_press:
-                state = state_brightness_adjust;
-                idle_mode = idle_mode_hsv;
-                break;
-
-            case ev_button_2_short_press:
-                if (event.short_press.count == 2)
-                {
+                case 2:
                     idle_mode = (idle_mode + 1) % idle_mode_max;
                     switch (idle_mode)
                     {
-                    case idle_mode_hsv:
-                        rgb = HSVToRGB(hsv);
-                        break;
-
                     case idle_mode_off:
-                        rgb = (rgb_t){0x00, 0x00, 0x00};
+                        hsv = (hsv_t){0, 0.0, 0.0};
                         break;
 
                     case idle_mode_red:
-                        rgb = (rgb_t){0xFF, 0x00, 0x00};
+                        hsv = (hsv_t){0, 1.0, 1.0};
                         break;
 
                     case idle_mode_blue:
-                        rgb = (rgb_t){0x00, 0x00, 0xFF};
+                        hsv = (hsv_t){120, 1.0, 1.0};
                         break;
 
                     case idle_mode_green:
-                        rgb = (rgb_t){0x00, 0xFF, 0x00};
+                        hsv = (hsv_t){240, 1.0, 1.0};
                         break;
 
                     case idle_mode_white:
-                        rgb = (rgb_t){0xFF, 0xFF, 0xFF};
+                        hsv = (hsv_t){0, 0.0, 1.0};
                         break;
 
                     case idle_mode_max:
                         hard_assert(1);
                         break;
                     }
-                    update_leds_rgb(rgb);
+                    update_leds_rgb(hsv_to_rgb(hsv));
+                    break;
+
+                case 3:
+                    idle_mode = idle_mode_red;
+                    hsv = (hsv_t){0, 1.0, 1.0};
+                    update_leds_rgb(hsv_to_rgb(hsv));
+                    break;
+
+                default:
+                    break;
                 }
                 break;
 
@@ -534,7 +539,7 @@ int main()
                         hsv.H += 5;
                     }
                     hsv.H %= 360;
-                    update_leds_rgb(HSVToRGB(hsv));
+                    update_leds_rgb(hsv_to_rgb(hsv));
                     count = 0;
                 }
             }
@@ -568,27 +573,13 @@ int main()
                         }
                         else
                         {
-                            if (idle_mode_hsv == idle_mode)
-                            {
-                                update_leds_rgb(HSVToRGB(hsv));
-                            }
-                            else
-                            {
-                                update_leds_rgb(rgb);
-                            }
+                            update_leds_rgb(hsv_to_rgb(hsv));
                         }
                         ack_repeat--;
                     }
                     else
                     {
-                        if (idle_mode_hsv == idle_mode)
-                        {
-                            update_leds_rgb(HSVToRGB(hsv));
-                        }
-                        else
-                        {
-                            update_leds_rgb(rgb);
-                        }
+                        update_leds_rgb(hsv_to_rgb(hsv));
                         count = 0;
                         state = state_idle;
                     }
@@ -622,15 +613,15 @@ int main()
                         hsv.V = 0.0;
                         increase = -increase;
                     }
-                    update_leds_rgb(HSVToRGB(hsv));
+                    update_leds_rgb(hsv_to_rgb(hsv));
                     count = 0;
                 }
             }
             break;
 
-            case ev_button_2_long_release:
-                count = 0;
+            case ev_button_1_long_release:
                 state = state_idle;
+                count = 0;
                 break;
 
             default:
