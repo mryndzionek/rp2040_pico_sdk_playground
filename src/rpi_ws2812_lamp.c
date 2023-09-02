@@ -9,7 +9,7 @@
 
 #include "ws2812.pio.h"
 
-#define BUTTON_1_GPIO (17)
+#define BUTTON_1_GPIO (15)
 
 #define IS_RGBW false
 #define NUM_PIXELS (64 * 4)
@@ -18,7 +18,7 @@
 #define MS_TO_TICKS(_ms) (_ms * TICK_HZ / 1000)
 #define DISCR_TIMEOUT_MS (200)
 
-#define WS2812_PIN (2)
+#define WS2812_PIN (8)
 
 #define FIFO_LENGTH (4)
 
@@ -336,7 +336,7 @@ static void discriminate_alarm(discriminator_t *discr)
     }
 }
 
-static void debug_event(event_t const *const ev)
+__attribute__((unused)) static void debug_event(event_t const *const ev)
 {
     if (ev->tag == ev_button_1_short_press)
     {
@@ -405,10 +405,10 @@ int main()
     {
         queue_remove_blocking(&event_queue, &event);
 
-        if (event.tag != ev_tick)
-        {
-            debug_event(&event);
-        }
+        // if (event.tag != ev_tick)
+        // {
+        //     debug_event(&event);
+        // }
 
         switch (event.tag)
         {
@@ -451,6 +451,7 @@ int main()
                 case 1:
                     if (event.short_press.with_hold)
                     {
+                        hsv.S = 1.0;
                         state = state_color_adjust;
                     }
                     else
@@ -476,6 +477,20 @@ int main()
                     break;
 
                 case 2:
+                    if (idle_mode == idle_mode_red)
+                    {
+                        idle_mode = idle_mode_off;
+                        hsv = (hsv_t){0, 0.0, 0.0};
+                    }
+                    else
+                    {
+                        idle_mode = idle_mode_red;
+                        hsv = (hsv_t){0, 1.0, 1.0};
+                    }
+                    update_leds_rgb(hsv_to_rgb(hsv));
+                    break;
+
+                case 3:
                     idle_mode = (idle_mode + 1) % idle_mode_max;
                     switch (idle_mode)
                     {
@@ -503,12 +518,6 @@ int main()
                         hard_assert(1);
                         break;
                     }
-                    update_leds_rgb(hsv_to_rgb(hsv));
-                    break;
-
-                case 3:
-                    idle_mode = idle_mode_red;
-                    hsv = (hsv_t){0, 1.0, 1.0};
                     update_leds_rgb(hsv_to_rgb(hsv));
                     break;
 
