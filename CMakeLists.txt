@@ -49,6 +49,7 @@ pico_generate_pio_header(rpi_ws2812_lamp ${CMAKE_CURRENT_LIST_DIR}/src/ws2812.pi
 
 target_link_libraries(rpi_ws2812_lamp
         pico_stdlib
+        pico_rand
         hardware_pio
         )
 

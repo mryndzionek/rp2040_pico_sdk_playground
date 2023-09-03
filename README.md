@@ -31,9 +31,10 @@ a WS2812 strip/matrix. Can be used to test strips/matrices.
 
 | Button press/sequence | Action                             |
 |-----------------------|------------------------------------|
-| Press and hold        | Adjust brightness                  |
-| Short press and hold  | Adjust color                       |
-| One short press       | Toggle 3-minute timer              |
-| Two short presses     | Toggle between 'Off' and 'Max Red' |
-| Three short presses   | Cycle through presets              |
+| Hold                  | Adjust brightness                  |
+| Tap and hold          | Adjust color                       |
+| One tap               | Toggle 3-minute timer              |
+| Two taps              | Toggle between 'Off' and 'Max Red' |
+| Three taps            | Cycle through presets              |
+| Four taps             | Activate "Doom flicker" feature    |
 

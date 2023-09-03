@@ -2,25 +2,27 @@
 #include <stdlib.h>
 #include <math.h>
 
-#include "pico/stdlib.h"
 #include "hardware/pio.h"
 #include "hardware/clocks.h"
+
+#include "pico/stdlib.h"
 #include "pico/util/queue.h"
 #include "pico/sync.h"
+#include "pico/rand.h"
 
 #include "ws2812.pio.h"
 
 #define BUTTON_1_GPIO (15)
+#define WS2812_PIN (8)
 
-#define IS_RGBW false
+#define IS_RGBW (false)
 #define NUM_PIXELS (64 * 4)
 #define SLEEP_TIMEOUT_MS (60UL * 3UL * 1000UL)
 #define TICK_HZ (100)
 #define MS_TO_TICKS(_ms) (_ms * TICK_HZ / 1000)
 #define DISCR_TIMEOUT_MS (200)
 
-#define WS2812_PIN (8)
-
+#define FLICKER_HZ (10)
 #define FIFO_LENGTH (4)
 
 typedef enum
@@ -33,9 +35,11 @@ typedef enum
     ev_button_1_discr_alarm,
     ev_tick,
     ev_sleep_alarm,
+    ev_flicker_start,
+    ev_flicker_tick,
 } event_e;
 
-static char *event_to_str[] = {
+static const char *const event_to_str[] = {
     "ev_button_1_press",
     "ev_button_1_release",
     "ev_button_1_short_press",
@@ -44,6 +48,8 @@ static char *event_to_str[] = {
     "ev_button_1_discr_alarm",
     "ev_tick",
     "ev_sleep_alarm",
+    "ev_flicker_start",
+    "ev_flicker_tick",
 };
 
 typedef struct
@@ -129,6 +135,9 @@ static const uint8_t dim_curve[] = {
     193, 196, 200, 203, 207, 211, 214, 218, 222, 226, 230, 234, 238, 242, 248, 255,
 };
 // clang-format on
+
+// static const char flicker_pattern[] = "mmmaaammmaaammmabcdefaaaammmmabcdefmmmaaaa";
+static const char flicker_pattern[] = "mmamammmmammamamaaamammma";
 
 static queue_t event_queue;
 static critical_section_t lock;
@@ -230,6 +239,16 @@ static bool led_tick_callback(repeating_timer_t *rt)
     return true; // keep repeating
 }
 
+static bool flicker_tick_callback(repeating_timer_t *rt)
+{
+    bool ret;
+    event_t event = {.tag = ev_flicker_tick};
+
+    ret = queue_try_add(&event_queue, &event);
+    hard_assert(ret);
+    return true; // keep repeating
+}
+
 static int64_t alarm_callback(alarm_id_t id, void *user_data)
 {
     bool ret;
@@ -237,6 +256,17 @@ static int64_t alarm_callback(alarm_id_t id, void *user_data)
 
     ret = queue_try_add(&event_queue, &event);
     hard_assert(ret);
+    return 0;
+}
+
+static int64_t flicker_callback(alarm_id_t id, void *user_data)
+{
+    bool ret;
+    event_t event = {.tag = ev_flicker_start};
+
+    ret = queue_try_add(&event_queue, &event);
+    hard_assert(ret);
+
     return 0;
 }
 
@@ -410,15 +440,20 @@ int main()
     ws2812_program_init(pio, sm, offset, WS2812_PIN, 800000, IS_RGBW);
 
     hsv_t hsv = (hsv_t){0, 1.0, 1.0};
+    hsv_t hsv_tmp = hsv;
     update_leds_rgb(hsv_to_rgb(hsv));
 
     event_t event;
-    repeating_timer_t tick_timer;
+    repeating_timer_t tick_timer = {.alarm_id = -1};
+    repeating_timer_t flicker_timer = {.alarm_id = -1};
     state_t state = state_idle;
     alarm_id_t off_id = -1;
     uint8_t ack_repeat = 0;
     size_t count = 0;
     idle_mode_e idle_mode = idle_mode_red;
+    bool flicker = false;
+    alarm_id_t flicker_id = -1;
+    uint8_t flicker_index = 0;
 
     debouncer_t button_1_deb = {
         .off_event = {.tag = ev_button_1_release},
@@ -457,6 +492,14 @@ int main()
             update_leds_rgb(hsv_to_rgb(hsv));
             off_id = -1;
             idle_mode = idle_mode_off;
+            if (flicker_timer.alarm_id != -1)
+            {
+                cancel_repeating_timer(&flicker_timer);
+            }
+            cancel_alarm(flicker_id);
+            flicker_id = -1;
+            flicker_index = 0;
+            flicker = false;
             break;
 
         case ev_tick:
@@ -470,6 +513,34 @@ int main()
 
         case ev_button_1_discr_alarm:
             discriminate_alarm(&button_1_discr);
+            break;
+
+        case ev_flicker_start:
+            if (flicker)
+            {
+                ret = add_repeating_timer_us(-1000000 / FLICKER_HZ, flicker_tick_callback, NULL, &flicker_timer);
+                hard_assert(ret);
+            }
+            break;
+
+        case ev_flicker_tick:
+            if (flicker)
+            {
+                if (flicker_index == sizeof(flicker_pattern))
+                {
+                    ret = cancel_repeating_timer(&flicker_timer);
+                    hard_assert(ret);
+                    flicker_id = add_alarm_in_ms(1000 * (60 + (rand() % 60)), flicker_callback, NULL, false);
+                    hard_assert(flicker_id > 0);
+                    flicker_index = 0;
+                    hsv = hsv_tmp;
+                }
+                else
+                {
+                    hsv.V = (float)(flicker_pattern[flicker_index++] - 'a') / 25;
+                }
+                update_leds_rgb(hsv_to_rgb(hsv));
+            }
             break;
 
         default:
@@ -521,6 +592,14 @@ int main()
                     {
                         idle_mode = idle_mode_off;
                         hsv = (hsv_t){0, 0.0, 0.0};
+                        if (flicker_timer.alarm_id != -1)
+                        {
+                            cancel_repeating_timer(&flicker_timer);
+                        }
+                        cancel_alarm(flicker_id);
+                        flicker_id = -1;
+                        flicker_index = 0;
+                        flicker = false;
                     }
                     else
                     {
@@ -559,6 +638,28 @@ int main()
                         break;
                     }
                     update_leds_rgb(hsv_to_rgb(hsv));
+                    break;
+
+                case 4:
+                    flicker ^= 1;
+                    if (flicker)
+                    {
+                        srand(get_rand_32());
+                        flicker_id = add_alarm_in_ms(50, flicker_callback, NULL, false);
+                        hard_assert(flicker_id > 0);
+                        hsv_tmp = hsv;
+                    }
+                    else
+                    {
+                        if (flicker_timer.alarm_id != -1)
+                        {
+                            cancel_repeating_timer(&flicker_timer);
+                        }
+                        cancel_alarm(flicker_id);
+                        flicker_id = -1;
+                        flicker_index = 0;
+                        flicker = false;
+                    }
                     break;
 
                 default:
