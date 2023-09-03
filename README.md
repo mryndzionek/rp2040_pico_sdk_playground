@@ -26,8 +26,14 @@ interface.
 
 ### rpi_ws2812_lamp
 
-A simple app controlled by two buttons, controlling
+A simple app controlled by one button, controlling
 a WS2812 strip/matrix. Can be used to test strips/matrices.
-Allows setting different colors and brightness levels.
-Also has a 3-minute power-off timer.
+
+| Button press/sequence | Action                             |
+|-----------------------|------------------------------------|
+| Press and hold        | Adjust brightness                  |
+| Short press and hold  | Adjust color                       |
+| One short press       | Toggle 3-minute timer              |
+| Two short presses     | Toggle between 'Off' and 'Max Red' |
+| Three short presses   | Cycle through presets              |
 

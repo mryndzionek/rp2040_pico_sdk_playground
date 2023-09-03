@@ -54,6 +54,3 @@ target_link_libraries(rpi_ws2812_lamp
 
 pico_add_extra_outputs(rpi_ws2812_lamp)
 
-
-
-

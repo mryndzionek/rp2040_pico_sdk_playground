@@ -6,6 +6,7 @@
 #include "hardware/pio.h"
 #include "hardware/clocks.h"
 #include "pico/util/queue.h"
+#include "pico/sync.h"
 
 #include "ws2812.pio.h"
 
@@ -109,6 +110,7 @@ typedef enum
 } idle_mode_e;
 
 static queue_t event_queue;
+static critical_section_t lock;
 
 static rgb_t hsv_to_rgb(hsv_t hsv)
 {
@@ -267,6 +269,7 @@ static void debounce(debouncer_t *deb)
 
 static void discriminate_input(discriminator_t *discr, bool input)
 {
+    critical_section_enter_blocking(&lock);
     discr->short_event.short_press.with_hold = input;
 
     if (discr->active)
@@ -294,9 +297,12 @@ static void discriminate_input(discriminator_t *discr, bool input)
         {
             if (discr->alarm_id > 0)
             {
-                cancel_alarm(discr->alarm_id);
-                discr->alarm_id = add_alarm_in_ms(DISCR_TIMEOUT_MS, discr_callback, discr, false);
-                hard_assert(discr->alarm_id > 0);
+                if (discr->alarm_id != -1)
+                {
+                    cancel_alarm(discr->alarm_id);
+                    discr->alarm_id = add_alarm_in_ms(DISCR_TIMEOUT_MS, discr_callback, discr, false);
+                    hard_assert(discr->alarm_id > 0);
+                }
             }
         }
     }
@@ -310,12 +316,14 @@ static void discriminate_input(discriminator_t *discr, bool input)
             discr->active = true;
         }
     }
+    critical_section_exit(&lock);
 }
 
 static void discriminate_alarm(discriminator_t *discr)
 {
     bool ret;
 
+    critical_section_enter_blocking(&lock);
     hard_assert(discr->active);
     discr->alarm_id = -1;
 
@@ -334,6 +342,7 @@ static void discriminate_alarm(discriminator_t *discr)
         }
         discr->short_event.short_press.count = 0;
     }
+    critical_section_exit(&lock);
 }
 
 __attribute__((unused)) static void debug_event(event_t const *const ev)
@@ -361,7 +370,11 @@ int main()
     printf("LED data pin: %d\n", WS2812_PIN);
     printf("Button pin: %d\n", BUTTON_1_GPIO);
 
+    gpio_init(BUTTON_1_GPIO);
+    gpio_set_dir(BUTTON_1_GPIO, GPIO_IN);
+
     queue_init(&event_queue, sizeof(event_t), FIFO_LENGTH);
+    critical_section_init(&lock);
 
     PIO pio = pio0;
     int sm = 0;
@@ -375,7 +388,7 @@ int main()
     event_t event;
     repeating_timer_t tick_timer;
     state_t state = state_idle;
-    alarm_id_t alarm_id = -1;
+    alarm_id_t off_id = -1;
     uint8_t ack_repeat = 0;
     size_t count = 0;
     idle_mode_e idle_mode = idle_mode_red;
@@ -415,7 +428,7 @@ int main()
         case ev_sleep_alarm:
             hsv = (hsv_t){0, 0.0, 0.0};
             update_leds_rgb(hsv_to_rgb(hsv));
-            alarm_id = -1;
+            off_id = -1;
             idle_mode = idle_mode_off;
             break;
 
@@ -454,22 +467,22 @@ int main()
                         hsv.S = 1.0;
                         state = state_color_adjust;
                     }
-                    else
+                    else if (idle_mode != idle_mode_off)
                     {
                         state = state_sleep_ack;
                         count = 0;
 
                         update_leds_rgb((rgb_t){0x00, 0x00, 0x00});
 
-                        if (alarm_id >= 0)
+                        if (off_id >= 0)
                         {
-                            cancel_alarm(alarm_id);
-                            alarm_id = -1;
+                            cancel_alarm(off_id);
+                            off_id = -1;
                             ack_repeat = 2;
                         }
                         else
                         {
-                            alarm_id = add_alarm_in_ms(SLEEP_TIMEOUT_MS, alarm_callback, NULL, false);
+                            off_id = add_alarm_in_ms(SLEEP_TIMEOUT_MS, alarm_callback, NULL, false);
                             hard_assert(ret);
                             ack_repeat = 0;
                         }
