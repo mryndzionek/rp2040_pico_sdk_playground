@@ -115,6 +115,22 @@ typedef enum
     idle_mode_max,
 } idle_mode_e;
 
+typedef struct
+{
+    hsv_t hsv;
+    hsv_t hsv_tmp;
+    state_t state;
+    idle_mode_e idle_mode;
+    repeating_timer_t tick_timer;
+    alarm_id_t off_id;
+    uint8_t ack_repeat;
+    size_t count;
+    repeating_timer_t flicker_timer;
+    bool flicker;
+    alarm_id_t flicker_id;
+    uint8_t flicker_index;
+} ctx_t;
+
 // clang-format off
 static const uint8_t dim_curve[] = {
     0,   1,   1,   2,   2,   2,   2,   2,   2,   3,   3,   3,   3,   3,   3,   3,
@@ -416,10 +432,19 @@ __attribute__((unused)) static void debug_event(event_t const *const ev)
     }
 }
 
+static void stop_flicker(ctx_t *ctx)
+{
+    if (ctx->flicker_timer.alarm_id != -1)
+    {
+        cancel_repeating_timer(&ctx->flicker_timer);
+    }
+    cancel_alarm(ctx->flicker_id);
+    ctx->flicker_id = -1;
+    ctx->flicker_index = 0;
+}
+
 int main()
 {
-    bool ret;
-
     stdio_init_all();
     set_sys_clock_khz(48000, true);
     setup_default_uart();
@@ -435,25 +460,22 @@ int main()
 
     PIO pio = pio0;
     int sm = 0;
-    uint offset = pio_add_program(pio, &ws2812_program);
-
-    ws2812_program_init(pio, sm, offset, WS2812_PIN, 800000, IS_RGBW);
-
-    hsv_t hsv = (hsv_t){0, 1.0, 1.0};
-    hsv_t hsv_tmp = hsv;
-    update_leds_rgb(hsv_to_rgb(hsv));
-
+    bool ret;
     event_t event;
-    repeating_timer_t tick_timer = {.alarm_id = -1};
-    repeating_timer_t flicker_timer = {.alarm_id = -1};
-    state_t state = state_idle;
-    alarm_id_t off_id = -1;
-    uint8_t ack_repeat = 0;
-    size_t count = 0;
-    idle_mode_e idle_mode = idle_mode_red;
-    bool flicker = false;
-    alarm_id_t flicker_id = -1;
-    uint8_t flicker_index = 0;
+
+    ctx_t ctx = {
+        .hsv = (hsv_t){0, 1.0, 1.0},
+        .state = state_idle,
+        .idle_mode = idle_mode_red,
+        .tick_timer = {.alarm_id = -1},
+        .off_id = -1,
+        .ack_repeat = 0,
+        .count = 0,
+        .flicker_timer = {.alarm_id = -1},
+        .flicker = false,
+        .flicker_id = -1,
+        .flicker_index = 0,
+    };
 
     debouncer_t button_1_deb = {
         .off_event = {.tag = ev_button_1_release},
@@ -473,7 +495,12 @@ int main()
         .active = false,
     };
 
-    ret = add_repeating_timer_us(-1000000 / TICK_HZ, led_tick_callback, NULL, &tick_timer);
+    uint offset = pio_add_program(pio, &ws2812_program);
+    ws2812_program_init(pio, sm, offset, WS2812_PIN, 800000, IS_RGBW);
+
+    ctx.hsv_tmp = ctx.hsv;
+    update_leds_rgb(hsv_to_rgb(ctx.hsv));
+    ret = add_repeating_timer_us(-1000000 / TICK_HZ, led_tick_callback, NULL, &ctx.tick_timer);
     hard_assert(ret);
 
     while (1)
@@ -488,18 +515,12 @@ int main()
         switch (event.tag)
         {
         case ev_sleep_alarm:
-            hsv = (hsv_t){0, 0.0, 0.0};
-            update_leds_rgb(hsv_to_rgb(hsv));
-            off_id = -1;
-            idle_mode = idle_mode_off;
-            if (flicker_timer.alarm_id != -1)
-            {
-                cancel_repeating_timer(&flicker_timer);
-            }
-            cancel_alarm(flicker_id);
-            flicker_id = -1;
-            flicker_index = 0;
-            flicker = false;
+            ctx.hsv = (hsv_t){0, 0.0, 0.0};
+            update_leds_rgb(hsv_to_rgb(ctx.hsv));
+            ctx.off_id = -1;
+            ctx.idle_mode = idle_mode_off;
+            stop_flicker(&ctx);
+            ctx.flicker = false;
             break;
 
         case ev_tick:
@@ -516,30 +537,39 @@ int main()
             break;
 
         case ev_flicker_start:
-            if (flicker)
+            if (ctx.flicker)
             {
-                ret = add_repeating_timer_us(-1000000 / FLICKER_HZ, flicker_tick_callback, NULL, &flicker_timer);
+                ret = add_repeating_timer_us(-1000000 / FLICKER_HZ, flicker_tick_callback, NULL, &ctx.flicker_timer);
                 hard_assert(ret);
+                ctx.hsv_tmp = ctx.hsv;
             }
             break;
 
         case ev_flicker_tick:
-            if (flicker)
+            if (ctx.state == state_idle)
             {
-                if (flicker_index == sizeof(flicker_pattern))
+                if (ctx.flicker)
                 {
-                    ret = cancel_repeating_timer(&flicker_timer);
-                    hard_assert(ret);
-                    flicker_id = add_alarm_in_ms(1000 * (60 + (rand() % 60)), flicker_callback, NULL, false);
-                    hard_assert(flicker_id > 0);
-                    flicker_index = 0;
-                    hsv = hsv_tmp;
+                    if (ctx.flicker_index == sizeof(flicker_pattern))
+                    {
+                        stop_flicker(&ctx);
+                        ctx.flicker_id = add_alarm_in_ms(1000 * (60 + (rand() % 60)), flicker_callback, NULL, false);
+                        hard_assert(ctx.flicker_id > 0);
+                        ctx.hsv = ctx.hsv_tmp;
+                    }
+                    else
+                    {
+                        ctx.hsv.V = (float)(flicker_pattern[ctx.flicker_index++] - 'a') / 25;
+                    }
+                    update_leds_rgb(hsv_to_rgb(ctx.hsv));
                 }
-                else
-                {
-                    hsv.V = (float)(flicker_pattern[flicker_index++] - 'a') / 25;
-                }
-                update_leds_rgb(hsv_to_rgb(hsv));
+            }
+            else
+            {
+                // skip current flicker
+                stop_flicker(&ctx);
+                ctx.flicker_id = add_alarm_in_ms(1000 * (60 + (rand() % 60)), flicker_callback, NULL, false);
+                hard_assert(ctx.flicker_id > 0);
             }
             break;
 
@@ -547,13 +577,13 @@ int main()
             break;
         }
 
-        switch (state)
+        switch (ctx.state)
         {
         case state_idle:
             switch (event.tag)
             {
             case ev_button_1_long_press:
-                state = state_brightness_adjust;
+                ctx.state = state_brightness_adjust;
                 break;
 
             case ev_button_1_short_press:
@@ -562,103 +592,90 @@ int main()
                 case 1:
                     if (event.short_press.with_hold)
                     {
-                        hsv.S = 1.0;
-                        state = state_color_adjust;
+                        ctx.hsv.S = 1.0;
+                        ctx.state = state_color_adjust;
                     }
-                    else if (idle_mode != idle_mode_off)
+                    else if (ctx.idle_mode != idle_mode_off)
                     {
-                        state = state_sleep_ack;
-                        count = 0;
+                        ctx.state = state_sleep_ack;
+                        ctx.count = 0;
 
                         update_leds_rgb((rgb_t){0x00, 0x00, 0x00});
 
-                        if (off_id >= 0)
+                        if (ctx.off_id >= 0)
                         {
-                            cancel_alarm(off_id);
-                            off_id = -1;
-                            ack_repeat = 2;
+                            cancel_alarm(ctx.off_id);
+                            ctx.off_id = -1;
+                            ctx.ack_repeat = 2;
                         }
                         else
                         {
-                            off_id = add_alarm_in_ms(SLEEP_TIMEOUT_MS, alarm_callback, NULL, false);
+                            ctx.off_id = add_alarm_in_ms(SLEEP_TIMEOUT_MS, alarm_callback, NULL, false);
                             hard_assert(ret);
-                            ack_repeat = 0;
+                            ctx.ack_repeat = 0;
                         }
                     }
                     break;
 
                 case 2:
-                    if (idle_mode == idle_mode_red)
+                    if (ctx.idle_mode == idle_mode_red)
                     {
-                        idle_mode = idle_mode_off;
-                        hsv = (hsv_t){0, 0.0, 0.0};
-                        if (flicker_timer.alarm_id != -1)
-                        {
-                            cancel_repeating_timer(&flicker_timer);
-                        }
-                        cancel_alarm(flicker_id);
-                        flicker_id = -1;
-                        flicker_index = 0;
-                        flicker = false;
+                        ctx.idle_mode = idle_mode_off;
+                        ctx.hsv = (hsv_t){0, 0.0, 0.0};
+                        stop_flicker(&ctx);
+                        ctx.flicker = false;
                     }
                     else
                     {
-                        idle_mode = idle_mode_red;
-                        hsv = (hsv_t){0, 1.0, 1.0};
+                        ctx.idle_mode = idle_mode_red;
+                        ctx.hsv = (hsv_t){0, 1.0, 1.0};
                     }
-                    update_leds_rgb(hsv_to_rgb(hsv));
+                    update_leds_rgb(hsv_to_rgb(ctx.hsv));
                     break;
 
                 case 3:
-                    idle_mode = (idle_mode + 1) % idle_mode_max;
-                    switch (idle_mode)
+                    ctx.idle_mode = (ctx.idle_mode + 1) % idle_mode_max;
+                    switch (ctx.idle_mode)
                     {
                     case idle_mode_off:
-                        hsv = (hsv_t){0, 0.0, 0.0};
+                        ctx.hsv = (hsv_t){0, 0.0, 0.0};
                         break;
 
                     case idle_mode_red:
-                        hsv = (hsv_t){0, 1.0, 1.0};
+                        ctx.hsv = (hsv_t){0, 1.0, 1.0};
                         break;
 
                     case idle_mode_blue:
-                        hsv = (hsv_t){120, 1.0, 1.0};
+                        ctx.hsv = (hsv_t){120, 1.0, 1.0};
                         break;
 
                     case idle_mode_green:
-                        hsv = (hsv_t){240, 1.0, 1.0};
+                        ctx.hsv = (hsv_t){240, 1.0, 1.0};
                         break;
 
                     case idle_mode_white:
-                        hsv = (hsv_t){0, 0.0, 1.0};
+                        ctx.hsv = (hsv_t){0, 0.0, 1.0};
                         break;
 
                     case idle_mode_max:
                         hard_assert(1);
                         break;
                     }
-                    update_leds_rgb(hsv_to_rgb(hsv));
+                    update_leds_rgb(hsv_to_rgb(ctx.hsv));
                     break;
 
                 case 4:
-                    flicker ^= 1;
-                    if (flicker)
+                    ctx.flicker ^= 1;
+                    if (ctx.flicker)
                     {
                         srand(get_rand_32());
-                        flicker_id = add_alarm_in_ms(50, flicker_callback, NULL, false);
-                        hard_assert(flicker_id > 0);
-                        hsv_tmp = hsv;
+                        ctx.flicker_id = add_alarm_in_ms(50, flicker_callback, NULL, false);
+                        hard_assert(ctx.flicker_id > 0);
+                        ctx.hsv_tmp = ctx.hsv;
                     }
                     else
                     {
-                        if (flicker_timer.alarm_id != -1)
-                        {
-                            cancel_repeating_timer(&flicker_timer);
-                        }
-                        cancel_alarm(flicker_id);
-                        flicker_id = -1;
-                        flicker_index = 0;
-                        flicker = false;
+                        stop_flicker(&ctx);
                     }
                     break;
 
@@ -677,27 +694,27 @@ int main()
             {
             case ev_tick:
             {
-                count++;
-                if (count == MS_TO_TICKS(100))
+                ctx.count++;
+                if (ctx.count == MS_TO_TICKS(100))
                 {
-                    if ((hsv.H < 15) || (hsv.H > 350))
+                    if ((ctx.hsv.H < 15) || (ctx.hsv.H > 350))
                     {
-                        hsv.H += 1;
+                        ctx.hsv.H += 1;
                     }
                     else
                     {
-                        hsv.H += 5;
+                        ctx.hsv.H += 5;
                     }
-                    hsv.H %= 360;
-                    update_leds_rgb(hsv_to_rgb(hsv));
-                    count = 0;
+                    ctx.hsv.H %= 360;
+                    update_leds_rgb(hsv_to_rgb(ctx.hsv));
+                    ctx.count = 0;
                 }
             }
             break;
 
             case ev_button_1_long_release:
-                state = state_idle;
-                count = 0;
+                ctx.state = state_idle;
+                ctx.count = 0;
                 break;
 
             default:
@@ -711,27 +728,27 @@ int main()
             {
             case ev_tick:
             {
-                count++;
-                if (count == MS_TO_TICKS(100))
+                ctx.count++;
+                if (ctx.count == MS_TO_TICKS(100))
                 {
-                    count = 0;
-                    if (ack_repeat)
+                    ctx.count = 0;
+                    if (ctx.ack_repeat)
                     {
-                        if ((ack_repeat % 2) == 1)
+                        if ((ctx.ack_repeat % 2) == 1)
                         {
                             update_leds_rgb((rgb_t){0x00, 0x00, 0x00});
                         }
                         else
                         {
-                            update_leds_rgb(hsv_to_rgb(hsv));
+                            update_leds_rgb(hsv_to_rgb(ctx.hsv));
                         }
-                        ack_repeat--;
+                        ctx.ack_repeat--;
                     }
                     else
                     {
-                        update_leds_rgb(hsv_to_rgb(hsv));
-                        count = 0;
-                        state = state_idle;
+                        update_leds_rgb(hsv_to_rgb(ctx.hsv));
+                        ctx.count = 0;
+                        ctx.state = state_idle;
                     }
                 }
             }
@@ -748,30 +765,30 @@ int main()
             {
             case ev_tick:
             {
-                count++;
-                if (count == MS_TO_TICKS(100))
+                ctx.count++;
+                if (ctx.count == MS_TO_TICKS(100))
                 {
                     static double increase = 0.05;
-                    hsv.V += increase;
-                    if (hsv.V > 1.0)
+                    ctx.hsv.V += increase;
+                    if (ctx.hsv.V > 1.0)
                     {
-                        hsv.V = 1.0;
+                        ctx.hsv.V = 1.0;
                         increase = -increase;
                     }
-                    else if (hsv.V < 0.0)
+                    else if (ctx.hsv.V < 0.0)
                     {
-                        hsv.V = 0.0;
+                        ctx.hsv.V = 0.0;
                         increase = -increase;
                     }
-                    update_leds_rgb(hsv_to_rgb(hsv));
-                    count = 0;
+                    update_leds_rgb(hsv_to_rgb(ctx.hsv));
+                    ctx.count = 0;
                 }
             }
             break;
 
             case ev_button_1_long_release:
-                state = state_idle;
-                count = 0;
+                ctx.state = state_idle;
+                ctx.count = 0;
                 break;
 
             default:
