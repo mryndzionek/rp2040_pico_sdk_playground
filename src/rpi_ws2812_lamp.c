@@ -71,6 +71,7 @@ typedef enum
     state_color_adjust,
     state_sleep_ack,
     state_brightness_adjust,
+    state_dim_out,
 } state_t;
 
 typedef struct
@@ -515,12 +516,10 @@ int main()
         switch (event.tag)
         {
         case ev_sleep_alarm:
-            ctx.hsv = (hsv_t){0, 0.0, 0.0};
-            update_leds_rgb(hsv_to_rgb(ctx.hsv));
-            ctx.off_id = -1;
-            ctx.idle_mode = idle_mode_off;
+            ctx.state = state_dim_out;
             stop_flicker(&ctx);
             ctx.flicker = false;
+            ctx.hsv_tmp = ctx.hsv;
             break;
 
         case ev_tick:
@@ -795,6 +794,46 @@ int main()
                 break;
             }
             break;
+
+        case state_dim_out:
+        {
+            static float t = 0.0f;
+            switch (event.tag)
+            {
+            case ev_tick:
+            {
+                ctx.count++;
+                if (ctx.count == MS_TO_TICKS(100))
+                {
+                    ctx.hsv.V = expf(-t / 8.0f);
+                    t += 0.1;
+                    if (ctx.hsv.V < 0.05)
+                    {
+                        ctx.hsv = (hsv_t){0, 0.0, 0.0};
+                        ctx.off_id = -1;
+                        ctx.idle_mode = idle_mode_off;
+                        ctx.state = state_idle;
+                        t = 0.0f;
+                    }
+                    update_leds_rgb(hsv_to_rgb(ctx.hsv));
+                    ctx.count = 0;
+                }
+            }
+            break;
+
+            case ev_button_1_long_press:
+            case ev_button_1_short_press:
+                ctx.hsv = ctx.hsv_tmp;
+                update_leds_rgb(hsv_to_rgb(ctx.hsv));
+                ctx.state = state_idle;
+                t = 0.0f;
+                break;
+
+            default:
+                break;
+            }
+        }
+        break;
 
         default:
             break;
