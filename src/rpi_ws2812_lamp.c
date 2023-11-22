@@ -617,6 +617,12 @@ int main()
                     break;
 
                 case 2:
+                    if (ctx.off_id >= 0)
+                    {
+                        cancel_alarm(ctx.off_id);
+                        ctx.off_id = -1;
+                    }
+
                     if (ctx.idle_mode == idle_mode_red)
                     {
                         ctx.idle_mode = idle_mode_off;
