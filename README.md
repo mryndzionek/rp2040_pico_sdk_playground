@@ -45,3 +45,4 @@ Reading audio from a INMP441 MEMS microphone using PIO+DMA,
 computing fixed point FFT (CMSIS-DSP) and displaying an ASCII
 spectrogram on serial.
 
+https://github.com/mryndzionek/rp2040_pico_sdk_playground/assets/786191/143725ea-1283-4246-8fa4-98fe817371da
