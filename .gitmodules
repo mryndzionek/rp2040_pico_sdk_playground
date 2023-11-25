@@ -1,3 +1,6 @@
 [submodule "external/u8g2"]
 	path = external/u8g2
 	url = https://github.com/olikraus/u8g2.git
+[submodule "external/CMSIS-DSP"]
+	path = external/CMSIS-DSP
+	url = https://github.com/ARM-software/CMSIS-DSP.git

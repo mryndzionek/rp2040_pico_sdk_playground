@@ -55,3 +55,23 @@ target_link_libraries(rpi_ws2812_lamp
 
 pico_add_extra_outputs(rpi_ws2812_lamp)
 
+set(CMSISDSP "${CMAKE_CURRENT_LIST_DIR}/external/CMSIS-DSP" CACHE STRING "CMSIS-DSP Library")
+add_subdirectory(${CMSISDSP}/Source bin_dsp)
+target_compile_options(CMSISDSP PRIVATE -Ofast -ffunction-sections -fdata-sections)
+target_link_libraries(CMSISDSP PUBLIC cmsis_core)
+
+add_executable(rpi_inmp441_fft_demo
+        src/rpi_inmp441_fft_demo.c
+        )
+
+pico_generate_pio_header(rpi_inmp441_fft_demo ${CMAKE_CURRENT_LIST_DIR}/src/inmp441.pio)
+
+target_link_libraries(rpi_inmp441_fft_demo
+        pico_stdlib
+        pico_rand
+        hardware_pio
+        hardware_dma
+        CMSISDSP
+        )
+
+pico_add_extra_outputs(rpi_inmp441_fft_demo)

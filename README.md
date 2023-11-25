@@ -38,3 +38,10 @@ a WS2812 strip/matrix. Can be used to test strips/matrices.
 | Three taps            | Cycle through presets              |
 | Four taps             | Activate "Doom flicker" feature    |
 
+
+### rpi_inmp441_fft_demo
+
+Reading audio from a INMP441 MEMS microphone using PIO+DMA,
+computing fixed point FFT (CMSIS-DSP) and displaying an ASCII
+spectrogram on serial.
+
