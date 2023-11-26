@@ -46,3 +46,14 @@ computing fixed point FFT (CMSIS-DSP) and displaying an ASCII
 spectrogram on serial.
 
 https://github.com/mryndzionek/rp2040_pico_sdk_playground/assets/786191/143725ea-1283-4246-8fa4-98fe817371da
+
+### rpi_tflm_micro_speech_demo
+
+#### /Keyword Spotting/Visual Wake Words/ on RP2040
+
+TFLM [Micro Speech](https://github.com/tensorflow/tflite-micro/blob/main/tensorflow/lite/micro/examples/micro_speech/train/README.md)
+model is ported to Raspberry Pi Pico (RP2040, Cortex-M0+). Sound is from a MEMS
+I2S microphone (INMP441). The CPU is clocked at 250MHz. Data from
+the microphone is transferred using PIO+DMA. With this configuration real-time
+speech analysis is possible (stride is 20ms at 16kHz sample rate and single inference takes ~19ms).
+

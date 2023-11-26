@@ -4,3 +4,9 @@
 [submodule "external/CMSIS-DSP"]
 	path = external/CMSIS-DSP
 	url = https://github.com/ARM-software/CMSIS-DSP.git
+[submodule "external/CMSIS-NN"]
+	path = external/CMSIS-NN
+	url = https://github.com/ARM-software/CMSIS-NN.git
+[submodule "external/tflite-micro"]
+	path = external/tflite-micro
+	url = https://github.com/tensorflow/tflite-micro.git
