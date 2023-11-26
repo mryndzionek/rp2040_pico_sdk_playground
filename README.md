@@ -57,3 +57,4 @@ I2S microphone (INMP441). The CPU is clocked at 250MHz. Data from
 the microphone is transferred using PIO+DMA. With this configuration real-time
 speech analysis is possible (stride is 20ms at 16kHz sample rate and single inference takes ~19ms).
 
+https://github.com/mryndzionek/rp2040_pico_sdk_playground/assets/786191/eb2e00cd-766a-4e30-b1a9-e1439eccf761
