@@ -47,6 +47,8 @@ spectrogram on serial.
 
 https://github.com/mryndzionek/rp2040_pico_sdk_playground/assets/786191/143725ea-1283-4246-8fa4-98fe817371da
 
+https://github.com/mryndzionek/rp2040_pico_sdk_playground/assets/786191/5a73f16c-892f-4e6c-8581-af352b213908
+
 ### rpi_tflm_micro_speech_demo
 
 #### /Keyword Spotting/Visual Wake Words/ on RP2040
