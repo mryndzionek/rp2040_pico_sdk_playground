@@ -125,3 +125,20 @@ target_link_libraries(rpi_tflm_micro_speech_demo
 target_compile_features(rpi_tflm_micro_speech_demo PRIVATE cxx_std_17)
 target_compile_definitions(rpi_tflm_micro_speech_demo PRIVATE TF_LITE_STATIC_MEMORY)
 pico_add_extra_outputs(rpi_tflm_micro_speech_demo)
+
+add_executable(rpi_inmp441_whistle_demo
+        src/rpi_inmp441_whistle_demo.c
+        src/whistle_detector.c
+        )
+
+pico_generate_pio_header(rpi_inmp441_whistle_demo ${CMAKE_CURRENT_LIST_DIR}/src/inmp441.pio)
+
+target_link_libraries(rpi_inmp441_whistle_demo
+        pico_stdlib
+        pico_rand
+        hardware_pio
+        hardware_dma
+        )
+
+pico_add_extra_outputs(rpi_inmp441_whistle_demo)
+
