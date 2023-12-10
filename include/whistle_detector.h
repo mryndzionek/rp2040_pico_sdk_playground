@@ -5,7 +5,7 @@
 #include <stdbool.h>
 
 #define SAMPLERATE (16000)
-#define WIN_SIZE (SAMPLERATE / 50) // 50 updates per second
+#define WIN_SIZE (SAMPLERATE / 100) // 100 updates per second
 #define N_FREQS (2)
 
 typedef struct _whistle_detector_t whistle_detector_t;

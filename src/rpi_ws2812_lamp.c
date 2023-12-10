@@ -9,11 +9,17 @@
 #include "pico/util/queue.h"
 #include "pico/sync.h"
 #include "pico/rand.h"
+#include "hardware/dma.h"
 
+#include "inmp441.pio.h"
 #include "ws2812.pio.h"
+
+#include "whistle_detector.h"
 
 #define BUTTON_1_GPIO (15)
 #define WS2812_PIN (8)
+
+#define DEFAULT_COLOR ((hsv_t){30, 1.0, 1.0})
 
 #define IS_RGBW (false)
 #define NUM_PIXELS (64 * 4)
@@ -24,6 +30,12 @@
 
 #define FLICKER_HZ (10)
 #define FIFO_LENGTH (4)
+
+#define INMP441_PIN_SD (26)
+#define INMP441_PIN_SCK (27)
+
+#define DMA_CHANNEL (0)
+#define DMA_CHANNEL_MASK (1u << DMA_CHANNEL)
 
 typedef enum
 {
@@ -37,6 +49,7 @@ typedef enum
     ev_sleep_alarm,
     ev_flicker_start,
     ev_flicker_tick,
+    ev_dma_finished,
 } event_e;
 
 static const char *const event_to_str[] = {
@@ -50,7 +63,7 @@ static const char *const event_to_str[] = {
     "ev_sleep_alarm",
     "ev_flicker_start",
     "ev_flicker_tick",
-};
+    "ev_dma_finished"};
 
 typedef struct
 {
@@ -417,28 +430,42 @@ static void stop_flicker(ctx_t *ctx)
     ctx->flicker_index = 0;
 }
 
+static void dma_handler()
+{
+    event_t event = {.tag = ev_dma_finished};
+    bool ret = queue_try_add(&event_queue, &event);
+    hard_assert(ret);
+    dma_hw->ints0 = 1u << DMA_CHANNEL;
+}
+
 int main()
 {
     stdio_init_all();
-    set_sys_clock_khz(48000, true);
-    setup_default_uart();
+    // set_sys_clock_khz(240000, true);
+    stdio_uart_init_full(uart0, 921600, 0, 1);
+
     printf("WS2812 lamp\n");
     printf("LED data pin: %d\n", WS2812_PIN);
     printf("Button pin: %d\n", BUTTON_1_GPIO);
 
     gpio_init(BUTTON_1_GPIO);
     gpio_set_dir(BUTTON_1_GPIO, GPIO_IN);
+    // gpio_pull_down(BUTTON_1_GPIO);
 
     queue_init(&event_queue, sizeof(event_t), FIFO_LENGTH);
     critical_section_init(&lock);
 
     PIO pio = pio0;
-    int sm = 0;
+    int sm;
     bool ret;
     event_t event;
+    whistle_detector_t *detector;
+    size_t bi = 0;
+    int32_t samples[2][WIN_SIZE];
+    float data[WIN_SIZE];
 
     ctx_t ctx = {
-        .hsv = (hsv_t){0, 1.0, 1.0},
+        .hsv = DEFAULT_COLOR,
         .state = state_idle,
         .idle_mode = idle_mode_red,
         .tick_timer = {.alarm_id = -1},
@@ -470,14 +497,44 @@ int main()
     };
 
     uint offset = pio_add_program(pio, &ws2812_program);
+    sm = pio_claim_unused_sm(pio, true);
     ws2812_program_init(pio, sm, offset, WS2812_PIN, 800000, IS_RGBW);
+
+    offset = pio_add_program(pio, &inmp441_program);
+    sm = pio_claim_unused_sm(pio, true);
+
+    dma_claim_mask(DMA_CHANNEL_MASK);
+    dma_channel_config channel_config = dma_channel_get_default_config(DMA_CHANNEL);
+    channel_config_set_dreq(&channel_config, pio_get_dreq(pio, sm, false));
+    channel_config_set_transfer_data_size(&channel_config, DMA_SIZE_32);
+    channel_config_set_write_increment(&channel_config, true);
+    channel_config_set_read_increment(&channel_config, false);
+
+    dma_channel_configure(DMA_CHANNEL,
+                          &channel_config,
+                          NULL,
+                          &pio->rxf[sm],
+                          WIN_SIZE,
+                          false);
+
+    dma_channel_set_irq0_enabled(DMA_CHANNEL, true);
+
+    irq_set_exclusive_handler(DMA_IRQ_0, dma_handler);
+    irq_set_enabled(DMA_IRQ_0, true);
+
+    inmp441_program_init(pio, sm, offset, SAMPLERATE, INMP441_PIN_SD, INMP441_PIN_SCK);
+
+    detector = whistle_detector_create(&(size_t[N_FREQS]){1200, 1850});
+    assert(detector);
 
     ctx.hsv_tmp = ctx.hsv;
     update_leds_rgb(hsv_to_rgb(ctx.hsv));
     ret = add_repeating_timer_us(-1000000 / TICK_HZ, led_tick_callback, NULL, &ctx.tick_timer);
     hard_assert(ret);
 
-    while (1)
+    dma_channel_set_write_addr(DMA_CHANNEL, (void *)samples[bi], true);
+
+    while (true)
     {
         queue_remove_blocking(&event_queue, &event);
 
@@ -545,6 +602,37 @@ int main()
             }
             break;
 
+        case ev_dma_finished:
+            // start another transfer
+            dma_channel_set_write_addr(DMA_CHANNEL, (void *)samples[bi ^ 1], true);
+            for (size_t i = 0; i < WIN_SIZE; i++)
+            {
+                data[i] = (float)samples[bi][i] / 2147483.648;
+            }
+
+            whistle_detector_out_e ret = whistle_detector_update(detector, data, WIN_SIZE);
+            if (ret == whistle_detector_on)
+            {
+                event_t event = {.tag = ev_button_1_short_press,
+                                 .short_press.count = 2,
+                                 .short_press.with_hold = false};
+
+                bool ret = queue_try_add(&event_queue, &event);
+                hard_assert(ret);
+            }
+            else if (ret == whistle_detector_off)
+            {
+                event_t event = {.tag = ev_button_1_short_press,
+                                 .short_press.count = 1,
+                                 .short_press.with_hold = false};
+
+                bool ret = queue_try_add(&event_queue, &event);
+                hard_assert(ret);
+            }
+
+            bi ^= 1;
+            break;
+
         default:
             break;
         }
@@ -606,7 +694,7 @@ int main()
                     else
                     {
                         ctx.idle_mode = idle_mode_red;
-                        ctx.hsv = (hsv_t){0, 1.0, 1.0};
+                        ctx.hsv = DEFAULT_COLOR;
                     }
                     update_leds_rgb(hsv_to_rgb(ctx.hsv));
                     break;
@@ -620,7 +708,7 @@ int main()
                         break;
 
                     case idle_mode_red:
-                        ctx.hsv = (hsv_t){0, 1.0, 1.0};
+                        ctx.hsv = DEFAULT_COLOR;
                         break;
 
                     case idle_mode_blue:

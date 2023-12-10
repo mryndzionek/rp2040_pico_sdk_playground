@@ -276,5 +276,5 @@ whistle_detector_t *whistle_detector_create(size_t const (*freqs)[N_FREQS])
 whistle_detector_out_e whistle_detector_update(whistle_detector_t *self, const float *x, size_t nx)
 {
     Goertzel_update(&self->gt, x, nx);
-    return detector_update(&self->detector, self->gt.powers[0] > 0.8, self->gt.powers[1] > 0.8);
+    return detector_update(&self->detector, self->gt.powers[0] > 0.4, self->gt.powers[1] > 0.4);
 }
