@@ -144,7 +144,7 @@ static uint32_t color_wheel(uint8_t pos)
 void plasma(uint8_t leds[LEDS_NUM][3])
 {
     int thisPhase = beatsin8(3, -64, 64);
-    int thatPhase = beatsin8(7, -64, 64);
+    int thatPhase = beatsin8(4, -64, 64);
 
     for (int k = 0; k < LEDS_NUM; k++)
     {
@@ -160,5 +160,5 @@ void plasma(uint8_t leds[LEDS_NUM][3])
         leds[k][1] = pproc(g, thisBright);
         leds[k][2] = pproc(b, thisBright);
     }
-    _time += 1;
+    _time += 2;
 }
