@@ -16,11 +16,13 @@
 #define WS2812_PIN (8)
 
 #define IS_RGBW (false)
-#define NUM_PIXELS (64 * 4)
+#define NUM_PIXELS (64 * 2UL)
 #define SLEEP_TIMEOUT_MS (60UL * 3UL * 1000UL)
-#define TICK_HZ (100)
+#define TICK_HZ (200)
 #define MS_TO_TICKS(_ms) (_ms * TICK_HZ / 1000)
 #define DISCR_TIMEOUT_MS (200)
+
+#define DEFAULT_COLOR ((hsv_t){30, 1.0, 1.0})
 
 #define FIFO_LENGTH (4)
 
@@ -67,6 +69,7 @@ typedef enum
     state_sleep_ack,
     state_brightness_adjust,
     state_dim_out,
+    state_plasma,
 } state_t;
 
 typedef struct
@@ -104,6 +107,7 @@ typedef struct
 typedef enum
 {
     idle_mode_off = 0,
+    idle_mode_default,
     idle_mode_red,
     idle_mode_green,
     idle_mode_blue,
@@ -122,6 +126,9 @@ typedef struct
     uint8_t ack_repeat;
     size_t count;
 } ctx_t;
+
+static uint8_t leds[NUM_PIXELS][3];
+void plasma(uint8_t leds[NUM_PIXELS][3]);
 
 static queue_t event_queue;
 static critical_section_t lock;
@@ -249,6 +256,7 @@ static void update_leds_rgb(rgb_t rgb)
     {
         put_pixel(urgb_u32(rgb.R, rgb.G, rgb.B));
     }
+    pio_sm_drain_tx_fifo(pio0, 0);
 }
 
 static void debounce(debouncer_t *deb)
@@ -394,9 +402,9 @@ int main()
     event_t event;
 
     ctx_t ctx = {
-        .hsv = (hsv_t){0, 1.0, 1.0},
+        .hsv = DEFAULT_COLOR,
         .state = state_idle,
-        .idle_mode = idle_mode_red,
+        .idle_mode = idle_mode_default,
         .tick_timer = {.alarm_id = -1},
         .off_id = -1,
         .ack_repeat = 0,
@@ -509,15 +517,15 @@ int main()
                         ctx.off_id = -1;
                     }
 
-                    if (ctx.idle_mode == idle_mode_red)
+                    if (ctx.idle_mode != idle_mode_off)
                     {
                         ctx.idle_mode = idle_mode_off;
                         ctx.hsv = (hsv_t){0, 0.0, 0.0};
                     }
                     else
                     {
-                        ctx.idle_mode = idle_mode_red;
-                        ctx.hsv = (hsv_t){0, 1.0, 1.0};
+                        ctx.idle_mode = idle_mode_default;
+                        ctx.hsv = DEFAULT_COLOR;
                     }
                     update_leds_rgb(hsv_to_rgb(ctx.hsv));
                     break;
@@ -528,6 +536,10 @@ int main()
                     {
                     case idle_mode_off:
                         ctx.hsv = (hsv_t){0, 0.0, 0.0};
+                        break;
+
+                    case idle_mode_default:
+                        ctx.hsv = DEFAULT_COLOR;
                         break;
 
                     case idle_mode_red:
@@ -551,6 +563,15 @@ int main()
                         break;
                     }
                     update_leds_rgb(hsv_to_rgb(ctx.hsv));
+                    break;
+
+                case 4:
+                    ctx.state = state_plasma;
+                    plasma(leds);
+                    for (int i = 0; i < NUM_PIXELS; ++i)
+                    {
+                        put_pixel(urgb_u32(leds[i][0], leds[i][1], leds[i][2]));
+                    }
                     break;
 
                 default:
@@ -709,6 +730,29 @@ int main()
             }
         }
         break;
+
+        case state_plasma:
+            switch (event.tag)
+            {
+            case ev_tick:
+                plasma(leds);
+                for (int i = 0; i < NUM_PIXELS; ++i)
+                {
+                    put_pixel(urgb_u32(leds[i][0], leds[i][1], leds[i][2]));
+                }
+                pio_sm_drain_tx_fifo(pio0, 0);
+                break;
+
+            case ev_button_1_short_press:
+            case ev_button_1_long_press:
+                update_leds_rgb(hsv_to_rgb(ctx.hsv));
+                ctx.state = state_idle;
+                break;
+
+            default:
+                break;
+            }
+            break;
 
         default:
             break;

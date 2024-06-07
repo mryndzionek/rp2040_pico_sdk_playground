@@ -45,6 +45,7 @@ pico_add_extra_outputs(rpi_lcd_test)
 
 add_executable(rpi_ws2812_lamp
         src/rpi_ws2812_lamp.c
+        src/plasma.c
         )
 
 pico_generate_pio_header(rpi_ws2812_lamp ${CMAKE_CURRENT_LIST_DIR}/src/ws2812.pio)
