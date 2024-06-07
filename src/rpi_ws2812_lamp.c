@@ -22,7 +22,6 @@
 #define MS_TO_TICKS(_ms) (_ms * TICK_HZ / 1000)
 #define DISCR_TIMEOUT_MS (200)
 
-#define FLICKER_HZ (10)
 #define FIFO_LENGTH (4)
 
 typedef enum
@@ -35,8 +34,6 @@ typedef enum
     ev_button_1_discr_alarm,
     ev_tick,
     ev_sleep_alarm,
-    ev_flicker_start,
-    ev_flicker_tick,
 } event_e;
 
 static const char *const event_to_str[] = {
@@ -48,8 +45,6 @@ static const char *const event_to_str[] = {
     "ev_button_1_discr_alarm",
     "ev_tick",
     "ev_sleep_alarm",
-    "ev_flicker_start",
-    "ev_flicker_tick",
 };
 
 typedef struct
@@ -126,14 +121,7 @@ typedef struct
     alarm_id_t off_id;
     uint8_t ack_repeat;
     size_t count;
-    repeating_timer_t flicker_timer;
-    bool flicker;
-    alarm_id_t flicker_id;
-    uint8_t flicker_index;
 } ctx_t;
-
-// static const char flicker_pattern[] = "mmmaaammmaaammmabcdefaaaammmmabcdefmmmaaaa";
-static const char flicker_pattern[] = "mmamammmmammamamaaamammma";
 
 static queue_t event_queue;
 static critical_section_t lock;
@@ -235,16 +223,6 @@ static bool led_tick_callback(repeating_timer_t *rt)
     return true; // keep repeating
 }
 
-static bool flicker_tick_callback(repeating_timer_t *rt)
-{
-    bool ret;
-    event_t event = {.tag = ev_flicker_tick};
-
-    ret = queue_try_add(&event_queue, &event);
-    hard_assert(ret);
-    return true; // keep repeating
-}
-
 static int64_t alarm_callback(alarm_id_t id, void *user_data)
 {
     bool ret;
@@ -252,17 +230,6 @@ static int64_t alarm_callback(alarm_id_t id, void *user_data)
 
     ret = queue_try_add(&event_queue, &event);
     hard_assert(ret);
-    return 0;
-}
-
-static int64_t flicker_callback(alarm_id_t id, void *user_data)
-{
-    bool ret;
-    event_t event = {.tag = ev_flicker_start};
-
-    ret = queue_try_add(&event_queue, &event);
-    hard_assert(ret);
-
     return 0;
 }
 
@@ -406,17 +373,6 @@ __attribute__((unused)) static void debug_event(event_t const *const ev)
     }
 }
 
-static void stop_flicker(ctx_t *ctx)
-{
-    if (ctx->flicker_timer.alarm_id != -1)
-    {
-        cancel_repeating_timer(&ctx->flicker_timer);
-    }
-    cancel_alarm(ctx->flicker_id);
-    ctx->flicker_id = -1;
-    ctx->flicker_index = 0;
-}
-
 int main()
 {
     stdio_init_all();
@@ -445,10 +401,6 @@ int main()
         .off_id = -1,
         .ack_repeat = 0,
         .count = 0,
-        .flicker_timer = {.alarm_id = -1},
-        .flicker = false,
-        .flicker_id = -1,
-        .flicker_index = 0,
     };
 
     debouncer_t button_1_deb = {
@@ -490,8 +442,6 @@ int main()
         {
         case ev_sleep_alarm:
             ctx.state = state_dim_out;
-            stop_flicker(&ctx);
-            ctx.flicker = false;
             ctx.hsv_tmp = ctx.hsv;
             break;
 
@@ -506,43 +456,6 @@ int main()
 
         case ev_button_1_discr_alarm:
             discriminate_alarm(&button_1_discr);
-            break;
-
-        case ev_flicker_start:
-            if (ctx.flicker)
-            {
-                ret = add_repeating_timer_us(-1000000 / FLICKER_HZ, flicker_tick_callback, NULL, &ctx.flicker_timer);
-                hard_assert(ret);
-                ctx.hsv_tmp = ctx.hsv;
-            }
-            break;
-
-        case ev_flicker_tick:
-            if (ctx.state == state_idle)
-            {
-                if (ctx.flicker)
-                {
-                    if (ctx.flicker_index == sizeof(flicker_pattern))
-                    {
-                        stop_flicker(&ctx);
-                        ctx.flicker_id = add_alarm_in_ms(1000 * (60 + (rand() % 60)), flicker_callback, NULL, false);
-                        hard_assert(ctx.flicker_id > 0);
-                        ctx.hsv = ctx.hsv_tmp;
-                    }
-                    else
-                    {
-                        ctx.hsv.V = (float)(flicker_pattern[ctx.flicker_index++] - 'a') / 25;
-                    }
-                    update_leds_rgb(hsv_to_rgb(ctx.hsv));
-                }
-            }
-            else
-            {
-                // skip current flicker
-                stop_flicker(&ctx);
-                ctx.flicker_id = add_alarm_in_ms(1000 * (60 + (rand() % 60)), flicker_callback, NULL, false);
-                hard_assert(ctx.flicker_id > 0);
-            }
             break;
 
         default:
@@ -600,8 +513,6 @@ int main()
                     {
                         ctx.idle_mode = idle_mode_off;
                         ctx.hsv = (hsv_t){0, 0.0, 0.0};
-                        stop_flicker(&ctx);
-                        ctx.flicker = false;
                     }
                     else
                     {
@@ -640,21 +551,6 @@ int main()
                         break;
                     }
                     update_leds_rgb(hsv_to_rgb(ctx.hsv));
-                    break;
-
-                case 4:
-                    ctx.flicker ^= 1;
-                    if (ctx.flicker)
-                    {
-                        srand(get_rand_32());
-                        ctx.flicker_id = add_alarm_in_ms(50, flicker_callback, NULL, false);
-                        hard_assert(ctx.flicker_id > 0);
-                        ctx.hsv_tmp = ctx.hsv;
-                    }
-                    else
-                    {
-                        stop_flicker(&ctx);
-                    }
                     break;
 
                 default:
