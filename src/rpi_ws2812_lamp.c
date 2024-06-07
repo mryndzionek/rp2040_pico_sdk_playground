@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <math.h>
 
+#include "arm_math.h"
+
 #include "hardware/pio.h"
 #include "hardware/clocks.h"
 #include "hardware/dma.h"
@@ -12,17 +14,27 @@
 #include "pico/rand.h"
 
 #include "ws2812.pio.h"
+#include "inmp441.pio.h"
 
 #define BUTTON_1_GPIO (15)
 #define WS2812_PIN (8)
 
-#define DMA_CHANNEL (0)
-#define DMA_CHANNEL_MASK (1u << DMA_CHANNEL)
+#define DMA_CHANNEL_LEDS (0)
+#define DMA_CHANNEL_LEDS_MASK (1u << DMA_CHANNEL_LEDS)
+
+#define SAMPLERATE (16000)
+#define FFTSIZE (512)
+
+#define INMP441_PIN_SD (26)
+#define INMP441_PIN_SCK (27)
+
+#define DMA_CHANNEL_MIC (1)
+#define DMA_CHANNEL_MIC_MASK (1u << DMA_CHANNEL_MIC)
 
 #define IS_RGBW (false)
 #define NUM_PIXELS (64 * 2UL)
 #define SLEEP_TIMEOUT_MS (60UL * 3UL * 1000UL)
-#define TICK_HZ (400L)
+#define TICK_HZ (100L)
 #define DIM_RATE (1.0 / (float)TICK_HZ)
 
 #define MS_TO_TICKS(_ms) (_ms * TICK_HZ / 1000)
@@ -42,6 +54,7 @@ typedef enum
     ev_button_1_discr_alarm,
     ev_tick,
     ev_sleep_alarm,
+    ev_dma_mic_finished,
 } event_e;
 
 static const char *const event_to_str[] = {
@@ -53,6 +66,7 @@ static const char *const event_to_str[] = {
     "ev_button_1_discr_alarm",
     "ev_tick",
     "ev_sleep_alarm",
+    "ev_dma_mic_finished",
 };
 
 typedef struct
@@ -131,11 +145,17 @@ typedef struct
     alarm_id_t off_id;
     uint8_t ack_repeat;
     size_t count;
+    bool sound;
 } ctx_t;
 
 static uint8_t leds[NUM_PIXELS][3];
 // static uint8_t leds_rem[NUM_PIXELS][3];
 static uint32_t leds_tx_buf[NUM_PIXELS];
+
+static uint32_t mic_samples[2][FFTSIZE];
+static q31_t fft_win[FFTSIZE];
+static float32_t fft_amps[NUM_PIXELS];
+static arm_rfft_instance_q31 ffti;
 
 void plasma(uint8_t leds[NUM_PIXELS][3]);
 
@@ -253,31 +273,114 @@ static inline uint32_t urgb_u32(uint8_t r, uint8_t g, uint8_t b)
            << 8;
 }
 
-static void init_led_bus(PIO pio, int sm)
+static void init_led_bus(PIO pio)
 {
     if (pio_can_add_program(pio, &ws2812_program))
     {
         uint offset = pio_add_program(pio, &ws2812_program);
+        int sm = pio_claim_unused_sm(pio, true);
+        dma_claim_mask(DMA_CHANNEL_LEDS_MASK);
+        dma_channel_config channel_config = dma_channel_get_default_config(DMA_CHANNEL_LEDS);
+        channel_config_set_dreq(&channel_config, pio_get_dreq(pio, sm, true));
+        channel_config_set_transfer_data_size(&channel_config, DMA_SIZE_32);
+        channel_config_set_read_increment(&channel_config, true);
+
+        dma_channel_configure(DMA_CHANNEL_LEDS,
+                              &channel_config,
+                              &pio->txf[sm],
+                              NULL,
+                              NUM_PIXELS,
+                              false);
+
         ws2812_program_init(pio, sm, offset, WS2812_PIN, 800000, IS_RGBW);
     }
     else
     {
         printf("Failed to add LED PIO program\n");
-        return;
+    }
+}
+
+static void dma_handler()
+{
+    event_t event = {.tag = ev_dma_mic_finished};
+    bool ret = queue_try_add(&event_queue, &event);
+    hard_assert(ret);
+    dma_hw->ints0 = 1u << DMA_CHANNEL_MIC;
+}
+
+static void init_mic_bus(PIO pio)
+{
+    uint offset;
+
+    if (pio_can_add_program(pio, &inmp441_program))
+    {
+        offset = pio_add_program(pio, &inmp441_program);
+        int sm = pio_claim_unused_sm(pio, true);
+        dma_claim_mask(DMA_CHANNEL_MIC_MASK);
+        dma_channel_config channel_config = dma_channel_get_default_config(DMA_CHANNEL_MIC);
+        channel_config_set_dreq(&channel_config, pio_get_dreq(pio, sm, false));
+        channel_config_set_transfer_data_size(&channel_config, DMA_SIZE_32);
+        channel_config_set_write_increment(&channel_config, true);
+        channel_config_set_read_increment(&channel_config, false);
+
+        dma_channel_configure(DMA_CHANNEL_MIC,
+                              &channel_config,
+                              NULL,
+                              &pio->rxf[sm],
+                              FFTSIZE,
+                              false);
+
+        dma_channel_set_irq0_enabled(DMA_CHANNEL_MIC, true);
+
+        irq_set_exclusive_handler(DMA_IRQ_0, dma_handler);
+        irq_set_enabled(DMA_IRQ_0, true);
+
+        inmp441_program_init(pio, sm, offset, SAMPLERATE, INMP441_PIN_SD, INMP441_PIN_SCK);
+    }
+    else
+    {
+        printf("Failed to add MIC PIO program\n");
+    }
+}
+
+static void compute_amps(uint32_t data[FFTSIZE])
+{
+    q31_t tmp[FFTSIZE];
+    q31_t tmp2[2 * FFTSIZE];
+
+    for (size_t j = 0; j < FFTSIZE; j++)
+    {
+        tmp2[j] = *((q31_t *)&data[j]);
     }
 
-    dma_claim_mask(DMA_CHANNEL_MASK);
-    dma_channel_config channel_config = dma_channel_get_default_config(DMA_CHANNEL);
-    channel_config_set_dreq(&channel_config, pio_get_dreq(pio, sm, true));
-    channel_config_set_transfer_data_size(&channel_config, DMA_SIZE_32);
-    channel_config_set_read_increment(&channel_config, true);
+    arm_mult_q31(tmp2, fft_win, tmp, FFTSIZE);
 
-    dma_channel_configure(DMA_CHANNEL,
-                          &channel_config,
-                          &pio->txf[sm],
-                          NULL,
-                          NUM_PIXELS,
-                          false);
+    arm_rfft_q31(&ffti, tmp, tmp2);
+    arm_cmplx_mag_q31(tmp2, tmp, FFTSIZE);
+
+    for (size_t j = 0; j < FFTSIZE / 2; j++)
+    {
+        size_t i = j * NUM_PIXELS / (FFTSIZE / 2);
+        float32_t a = ((float32_t)tmp[j]) / (1UL << 22);
+        a *= 1.4;
+        a = 1.0 - expf(-(a * 250) / 10);
+
+        if (a >= fft_amps[i])
+        {
+            fft_amps[i] = a;
+        }
+        else
+        {
+            fft_amps[i] -= 1.0 / (1.0 * (SAMPLERATE / FFTSIZE));
+        }
+    }
+}
+
+static void init_window(q31_t *const y, size_t ny)
+{
+    float32_t w[ny];
+    arm_hanning_f32(w, ny);
+    arm_float_to_q31(w, y, ny);
 }
 
 static bool led_tick_callback(repeating_timer_t *rt)
@@ -435,8 +538,8 @@ __attribute__((unused)) static void debug_event(event_t const *const ev)
 int main()
 {
     stdio_init_all();
-    // set_sys_clock_khz(48000, true);
-    setup_default_uart();
+    // set_sys_clock_khz(240000, true);
+    stdio_uart_init_full(uart0, 921600, 0, 1);
 
     printf("WS2812 lamp\n");
     printf("LED data pin: %d\n", WS2812_PIN);
@@ -448,8 +551,11 @@ int main()
     queue_init(&event_queue, sizeof(event_t), FIFO_LENGTH);
     critical_section_init(&lock);
 
-    PIO pio = pio0;
-    int sm = 0;
+    size_t bi = 0;
+
+    PIO leds_pio = pio0;
+    PIO mic_pio = pio1;
+
     bool ret;
     event_t event;
 
@@ -461,6 +567,7 @@ int main()
         .off_id = -1,
         .ack_repeat = 0,
         .count = 0,
+        .sound = false,
     };
 
     debouncer_t button_1_deb = {
@@ -481,11 +588,18 @@ int main()
         .active = false,
     };
 
-    init_led_bus(pio, sm);
+    init_led_bus(leds_pio);
+    init_mic_bus(mic_pio);
+    init_window(fft_win, FFTSIZE);
+    arm_status status = arm_rfft_init_512_q31(&ffti, 0, 1);
+    assert(status == ARM_MATH_SUCCESS);
+    (void)status;
 
     ctx.hsv_tmp = ctx.hsv;
     ret = add_repeating_timer_us(-1000000 / TICK_HZ, led_tick_callback, NULL, &ctx.tick_timer);
     hard_assert(ret);
+
+    dma_channel_set_write_addr(DMA_CHANNEL_MIC, (void *)mic_samples[bi], true);
 
     while (1)
     {
@@ -503,8 +617,16 @@ int main()
             ctx.hsv_tmp = ctx.hsv;
             break;
 
+        case ev_dma_mic_finished:
+            // start another transfer
+            dma_channel_set_write_addr(DMA_CHANNEL_MIC, (void *)mic_samples[bi ^ 1], true);
+            compute_amps(mic_samples[bi]);
+            bi ^= 1;
+            break;
+
         case ev_tick:
             debounce(&button_1_deb);
+
             if (ctx.state != state_plasma)
             {
                 // solid color
@@ -530,11 +652,18 @@ int main()
                 uint8_t r = leds[i][0];
                 uint8_t g = leds[i][1];
                 uint8_t b = leds[i][2];
+
+                if (ctx.sound)
+                {
+                    r *= fft_amps[i];
+                    g *= fft_amps[i];
+                    b *= fft_amps[i];
+                }
                 leds_tx_buf[i] = urgb_u32(r, g, b);
             }
 
-            dma_channel_set_read_addr(DMA_CHANNEL, (void *)leds_tx_buf, true);
-            // dma_channel_wait_for_finish_blocking(DMA_CHANNEL);
+            dma_channel_set_read_addr(DMA_CHANNEL_LEDS, (void *)leds_tx_buf, true);
+            // dma_channel_wait_for_finish_blocking(DMA_CHANNEL_LEDS);
             break;
 
         case ev_button_1_press:
@@ -647,6 +776,10 @@ int main()
 
                 case 4:
                     ctx.state = state_plasma;
+                    break;
+
+                case 5:
+                    ctx.sound ^= 1;
                     break;
 
                 default:

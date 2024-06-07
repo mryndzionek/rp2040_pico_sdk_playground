@@ -49,12 +49,14 @@ add_executable(rpi_ws2812_lamp
         )
 
 pico_generate_pio_header(rpi_ws2812_lamp ${CMAKE_CURRENT_LIST_DIR}/src/ws2812.pio)
+pico_generate_pio_header(rpi_ws2812_lamp ${CMAKE_CURRENT_LIST_DIR}/src/inmp441.pio)
 
 target_link_libraries(rpi_ws2812_lamp
         pico_stdlib
         pico_rand
         hardware_pio
         hardware_dma
+        CMSISDSP
         )
 
 pico_add_extra_outputs(rpi_ws2812_lamp)
