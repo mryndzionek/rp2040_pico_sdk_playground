@@ -160,5 +160,5 @@ void plasma(uint8_t leds[LEDS_NUM][3])
         leds[k][1] = pproc(g, thisBright);
         leds[k][2] = pproc(b, thisBright);
     }
-    _time += 2;
+    _time += 1;
 }

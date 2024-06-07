@@ -4,6 +4,7 @@
 
 #include "hardware/pio.h"
 #include "hardware/clocks.h"
+#include "hardware/dma.h"
 
 #include "pico/stdlib.h"
 #include "pico/util/queue.h"
@@ -15,10 +16,15 @@
 #define BUTTON_1_GPIO (15)
 #define WS2812_PIN (8)
 
+#define DMA_CHANNEL (0)
+#define DMA_CHANNEL_MASK (1u << DMA_CHANNEL)
+
 #define IS_RGBW (false)
 #define NUM_PIXELS (64 * 2UL)
 #define SLEEP_TIMEOUT_MS (60UL * 3UL * 1000UL)
-#define TICK_HZ (200)
+#define TICK_HZ (400L)
+#define DIM_RATE (1.0 / (float)TICK_HZ)
+
 #define MS_TO_TICKS(_ms) (_ms * TICK_HZ / 1000)
 #define DISCR_TIMEOUT_MS (200)
 
@@ -128,7 +134,8 @@ typedef struct
 } ctx_t;
 
 static uint8_t leds[NUM_PIXELS][3];
-static uint8_t leds_rem[NUM_PIXELS][3];
+// static uint8_t leds_rem[NUM_PIXELS][3];
+static uint32_t leds_tx_buf[NUM_PIXELS];
 
 void plasma(uint8_t leds[NUM_PIXELS][3]);
 
@@ -238,16 +245,39 @@ static rgb_t hsv_to_rgb(hsv_t hsv)
     };
 }
 
-static inline void put_pixel(uint32_t pixel_grb)
-{
-    pio_sm_put_blocking(pio0, 0, pixel_grb << 8u);
-}
-
 static inline uint32_t urgb_u32(uint8_t r, uint8_t g, uint8_t b)
 {
-    return ((uint32_t)(r) << 8) |
-           ((uint32_t)(g) << 16) |
-           (uint32_t)(b);
+    return (((uint32_t)(r) << 8) |
+            ((uint32_t)(g) << 16) |
+            (uint32_t)(b))
+           << 8;
+}
+
+static void init_led_bus(PIO pio, int sm)
+{
+    if (pio_can_add_program(pio, &ws2812_program))
+    {
+        uint offset = pio_add_program(pio, &ws2812_program);
+        ws2812_program_init(pio, sm, offset, WS2812_PIN, 800000, IS_RGBW);
+    }
+    else
+    {
+        printf("Failed to add LED PIO program\n");
+        return;
+    }
+
+    dma_claim_mask(DMA_CHANNEL_MASK);
+    dma_channel_config channel_config = dma_channel_get_default_config(DMA_CHANNEL);
+    channel_config_set_dreq(&channel_config, pio_get_dreq(pio, sm, true));
+    channel_config_set_transfer_data_size(&channel_config, DMA_SIZE_32);
+    channel_config_set_read_increment(&channel_config, true);
+
+    dma_channel_configure(DMA_CHANNEL,
+                          &channel_config,
+                          &pio->txf[sm],
+                          NULL,
+                          NUM_PIXELS,
+                          false);
 }
 
 static bool led_tick_callback(repeating_timer_t *rt)
@@ -278,17 +308,6 @@ static int64_t discr_callback(alarm_id_t id, void *user_data)
     ret = queue_try_add(&event_queue, &discr->alarm_event);
     hard_assert(ret);
     return 0;
-}
-
-static void _update_leds_rgb(rgb_t rgb)
-{
-    static uint8_t tmp[3] = {0};
-
-    for (int i = 0; i < NUM_PIXELS; ++i)
-    {
-        put_pixel(urgb_u32(apply_gamma(rgb.R, &tmp[0]), apply_gamma(rgb.G, &tmp[1]), apply_gamma(rgb.B, &tmp[2])));
-    }
-    pio_sm_drain_tx_fifo(pio0, 0);
 }
 
 static void debounce(debouncer_t *deb)
@@ -416,8 +435,9 @@ __attribute__((unused)) static void debug_event(event_t const *const ev)
 int main()
 {
     stdio_init_all();
-    set_sys_clock_khz(48000, true);
+    // set_sys_clock_khz(48000, true);
     setup_default_uart();
+
     printf("WS2812 lamp\n");
     printf("LED data pin: %d\n", WS2812_PIN);
     printf("Button pin: %d\n", BUTTON_1_GPIO);
@@ -461,11 +481,9 @@ int main()
         .active = false,
     };
 
-    uint offset = pio_add_program(pio, &ws2812_program);
-    ws2812_program_init(pio, sm, offset, WS2812_PIN, 800000, IS_RGBW);
+    init_led_bus(pio, sm);
 
     ctx.hsv_tmp = ctx.hsv;
-    _update_leds_rgb(hsv_to_rgb(ctx.hsv));
     ret = add_repeating_timer_us(-1000000 / TICK_HZ, led_tick_callback, NULL, &ctx.tick_timer);
     hard_assert(ret);
 
@@ -489,20 +507,34 @@ int main()
             debounce(&button_1_deb);
             if (ctx.state != state_plasma)
             {
-                _update_leds_rgb(hsv_to_rgb(ctx.hsv));
+                // solid color
+                for (int i = 0; i < NUM_PIXELS; ++i)
+                {
+                    rgb_t rgb = hsv_to_rgb(ctx.hsv);
+                    leds[i][0] = rgb.R;
+                    leds[i][1] = rgb.G;
+                    leds[i][2] = rgb.B;
+                }
             }
             else
             {
                 plasma(leds);
-                for (int i = 0; i < NUM_PIXELS; ++i)
-                {
-                    uint8_t r = apply_gamma(leds[i][0], &leds_rem[i][0]);
-                    uint8_t g = apply_gamma(leds[i][1], &leds_rem[i][1]);
-                    uint8_t b = apply_gamma(leds[i][2], &leds_rem[i][2]);
-                    put_pixel(urgb_u32(r, g, b));
-                }
-                pio_sm_drain_tx_fifo(pio0, 0);
             }
+
+            // create the DMA buffer
+            for (int i = 0; i < NUM_PIXELS; ++i)
+            {
+                // uint8_t r = apply_gamma(leds[i][0], &leds_rem[i][0]);
+                // uint8_t g = apply_gamma(leds[i][1], &leds_rem[i][1]);
+                // uint8_t b = apply_gamma(leds[i][2], &leds_rem[i][2]);
+                uint8_t r = leds[i][0];
+                uint8_t g = leds[i][1];
+                uint8_t b = leds[i][2];
+                leds_tx_buf[i] = urgb_u32(r, g, b);
+            }
+
+            dma_channel_set_read_addr(DMA_CHANNEL, (void *)leds_tx_buf, true);
+            // dma_channel_wait_for_finish_blocking(DMA_CHANNEL);
             break;
 
         case ev_button_1_press:
@@ -564,6 +596,7 @@ int main()
                     {
                         cancel_alarm(ctx.off_id);
                         ctx.off_id = -1;
+                        ctx.ack_repeat = 2;
                     }
 
                     if (ctx.idle_mode != idle_mode_off)
@@ -684,6 +717,7 @@ int main()
                     {
                         ctx.count = 0;
                         ctx.hsv = ctx.hsv_tmp;
+                        ctx.hsv.V = 1.0;
                         ctx.state = state_idle;
                     }
                 }
@@ -738,20 +772,15 @@ int main()
             {
             case ev_tick:
             {
-                ctx.count++;
-                if (ctx.count == MS_TO_TICKS(100))
+                ctx.hsv.V = expf(-t / 24.0f);
+                t += DIM_RATE;
+                if (ctx.hsv.V < 0.04)
                 {
-                    ctx.hsv.V = expf(-t / 8.0f);
-                    t += 0.1;
-                    if (ctx.hsv.V < 0.004)
-                    {
-                        ctx.hsv = (hsv_t){0, 0.0, 0.0};
-                        ctx.off_id = -1;
-                        ctx.idle_mode = idle_mode_off;
-                        ctx.state = state_idle;
-                        t = 0.0f;
-                    }
-                    ctx.count = 0;
+                    ctx.hsv = (hsv_t){0, 0.0, 0.0};
+                    ctx.off_id = -1;
+                    ctx.idle_mode = idle_mode_off;
+                    ctx.state = state_idle;
+                    t = 0.0f;
                 }
             }
             break;

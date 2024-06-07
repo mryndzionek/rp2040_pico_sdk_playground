@@ -54,6 +54,7 @@ target_link_libraries(rpi_ws2812_lamp
         pico_stdlib
         pico_rand
         hardware_pio
+        hardware_dma
         )
 
 pico_add_extra_outputs(rpi_ws2812_lamp)
