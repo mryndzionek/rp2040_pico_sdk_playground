@@ -3,6 +3,7 @@
 #include <math.h>
 
 #include "pico/stdlib.h"
+#include "hardware/clocks.h"
 
 #include "u8g2.h"
 #include "u8g2_ili9486_driver.h"

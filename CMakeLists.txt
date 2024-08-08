@@ -35,10 +35,10 @@ pico_generate_pio_header(rpi_lcd_test ${CMAKE_CURRENT_LIST_DIR}/src/ili9486_lcd_
 
 target_link_libraries(rpi_lcd_test
         pico_stdlib
+        hardware_irq
         hardware_pwm
         hardware_pio
         hardware_dma
-        hardware_irq
         u8g2)
 
 pico_add_extra_outputs(rpi_lcd_test)
@@ -64,7 +64,7 @@ pico_add_extra_outputs(rpi_ws2812_lamp)
 set(CMSISDSP "${CMAKE_CURRENT_LIST_DIR}/external/CMSIS-DSP" CACHE STRING "CMSIS-DSP Library")
 add_subdirectory(${CMSISDSP}/Source bin_dsp)
 target_compile_options(CMSISDSP PRIVATE -Ofast)
-target_link_libraries(CMSISDSP PUBLIC cmsis_core)
+target_link_libraries(CMSISDSP PUBLIC pico_stdlib cmsis_core)
 
 add_executable(rpi_inmp441_fft_demo
         src/rpi_inmp441_fft_demo.c
@@ -85,7 +85,7 @@ pico_add_extra_outputs(rpi_inmp441_fft_demo)
 set(CMSISNN "${CMAKE_CURRENT_LIST_DIR}/external/CMSIS-NN" CACHE STRING "CMSIS-NN Library")
 add_subdirectory(${CMSISNN} bin_nn)
 target_compile_options(cmsis-nn PRIVATE -Ofast)
-target_link_libraries(cmsis-nn PUBLIC cmsis_core)
+target_link_libraries(cmsis-nn PUBLIC pico_stdlib cmsis_core)
 
 add_library(tflitemicro STATIC IMPORTED)
 set_property(TARGET tflitemicro  PROPERTY
