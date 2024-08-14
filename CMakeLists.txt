@@ -146,3 +146,23 @@ target_link_libraries(rpi_inmp441_whistle_demo
 
 pico_add_extra_outputs(rpi_inmp441_whistle_demo)
 
+add_executable(rpi_inmp441_kws
+        src/rpi_inmp441_kws.c
+        src/fbank.c
+        src/fast_grnn.c
+        )
+
+pico_generate_pio_header(rpi_inmp441_kws ${CMAKE_CURRENT_LIST_DIR}/src/inmp441.pio)
+
+target_link_libraries(rpi_inmp441_kws
+        pico_stdlib
+        pico_rand
+        pico_multicore
+        hardware_pio
+        hardware_dma
+        CMSISDSP
+        )
+
+#target_compile_definitions(rpi_inmp441_kws PRIVATE PICO_STACK_SIZE=0x1000)
+pico_add_extra_outputs(rpi_inmp441_kws)
+
