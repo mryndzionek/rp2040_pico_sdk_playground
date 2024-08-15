@@ -70,7 +70,7 @@ TinyML keyword spotting demo. The model is [Shallow RNN](https://github.com/micr
 architecture with a [FastGRNN](https://github.com/microsoft/EdgeML/blob/master/docs/publications/FastGRNN.pdf) cell converted
 to ~200 lines of C code.
 At 280MHz Core0 is setting up DMA transfers from I2S microphone
-and doing feature extraction (dc blocking -> preemphasis -> FFT -> power -> log -> Mel filterbank)
+and doing feature extraction (`dc blocking` -> `preemphasis` -> `FFT` -> `power` -> `log` -> `Mel filterbank`)
 in frames, nine frames a second. The core utilization is ~80%.
 Core1 is (almost) continuously performing NN inference and manages
 to do single inference in ~320ms.

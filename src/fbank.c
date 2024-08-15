@@ -22,8 +22,6 @@
 #define F_EPS (2.220446049250313e-16f)
 #define FILTERBANK_LEN (40)
 
-#define NUM_LABELS (6)
-
 // clang-format off
 
 static const uint8_t FILTERBANK_OFF[NUM_FILT] = 

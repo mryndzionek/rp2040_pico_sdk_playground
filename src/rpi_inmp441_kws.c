@@ -129,6 +129,15 @@ int main()
     stdio_init_all();
     set_sys_clock_khz(280000, true);
     stdio_uart_init_full(uart0, 921600, 0, 1);
+
+    printf("Keyword spotting demo\n");
+    printf("Recognized keywords:\n\t");
+    for (size_t i = 1; i < NUM_LABELS; i++)
+    {
+        printf("%s, ", fbank_label_idx_to_str(i));
+    }
+    printf("\n");
+
     multicore_launch_core1_with_stack(core1_entry, core1_stack, sizeof(core1_stack));
 
     fbank_init();
