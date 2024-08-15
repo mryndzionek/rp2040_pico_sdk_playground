@@ -38,25 +38,19 @@ static void rnn0_process(const float input[9][32], const float hidden[9][64], fl
 
     for (size_t t = 0; t < 9; t++)
     {
-        for (size_t j = 0; j < 64; j++)
+        for (size_t i = 0; i < 32; i++)
         {
-            for (size_t i = 0; i < 32; i += 4)
+            for (size_t j = 0; j < 64; j++)
             {
                 output[t][j] += GRNN0_W[j][i] * input[t][i];
-                output[t][j] += GRNN0_W[j][i + 1] * input[t][i + 1];
-                output[t][j] += GRNN0_W[j][i + 2] * input[t][i + 2];
-                output[t][j] += GRNN0_W[j][i + 3] * input[t][i + 3];
             }
         }
 
         for (size_t j = 0; j < 64; j++)
         {
-            for (size_t i = 0; i < 64; i += 4)
+            for (size_t i = 0; i < 64; i++)
             {
                 output[t][j] += GRNN0_U[j][i] * hidden[t][i];
-                output[t][j] += GRNN0_U[j][i + 1] * hidden[t][i + 1];
-                output[t][j] += GRNN0_U[j][i + 2] * hidden[t][i + 2];
-                output[t][j] += GRNN0_U[j][i + 3] * hidden[t][i + 3];
             }
         }
 
@@ -103,12 +97,9 @@ void sha_rnn_rnn1_process(const sha_rnn_rnn1_input_t input, sha_rnn_fc_input_t o
     {
         for (size_t j = 0; j < 32; j++)
         {
-            for (size_t i = 0; i < 64; i += 4)
+            for (size_t i = 0; i < 64; i++)
             {
                 output[t][j] += GRNN1_W[j][i] * input[t][i];
-                output[t][j] += GRNN1_W[j][i + 1] * input[t][i + 1];
-                output[t][j] += GRNN1_W[j][i + 2] * input[t][i + 2];
-                output[t][j] += GRNN1_W[j][i + 3] * input[t][i + 3];
             }
         }
 
@@ -116,12 +107,9 @@ void sha_rnn_rnn1_process(const sha_rnn_rnn1_input_t input, sha_rnn_fc_input_t o
         {
             for (size_t j = 0; j < 32; j++)
             {
-                for (size_t i = 0; i < 32; i += 4)
+                for (size_t i = 0; i < 32; i++)
                 {
                     output[t][j] += GRNN1_U[j][i] * output[t - 1][i];
-                    output[t][j] += GRNN1_U[j][i + 1] * output[t - 1][i + 1];
-                    output[t][j] += GRNN1_U[j][i + 2] * output[t - 1][i + 2];
-                    output[t][j] += GRNN1_U[j][i + 3] * output[t - 1][i + 3];
                 }
             }
         }
@@ -146,12 +134,9 @@ void sha_rnn_fc_process(const sha_rnn_fc_input_t input, sha_rnn_output_t output)
     {
         for (size_t j = 0; j < 6; j++)
         {
-            for (size_t i = 0; i < 32; i += 4)
+            for (size_t i = 0; i < 32; i++)
             {
                 output[t][j] += input[t][i] * FC_W[j][i];
-                output[t][j] += input[t][i + 1] * FC_W[j][i + 1];
-                output[t][j] += input[t][i + 2] * FC_W[j][i + 2];
-                output[t][j] += input[t][i + 3] * FC_W[j][i + 3];
             }
             output[t][j] += FC_B[j];
         }

@@ -29,10 +29,10 @@
 #define DMA_CHANNEL (0)
 #define DMA_CHANNEL_MASK (1u << DMA_CHANNEL)
 
+#define DISP_SIG_SIZE (sizeof(disp_signs) - 1)
+
 static int32_t samples[2][CHUNK_SIZE];
 static float input[CHUNK_SIZE] = {0.0};
-
-#define DISP_SIG_SIZE (sizeof(disp_signs) - 1)
 
 static const char disp_signs[] = " .,-:+*&NM#";
 
