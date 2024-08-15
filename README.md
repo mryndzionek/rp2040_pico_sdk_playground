@@ -73,8 +73,7 @@ At 280MHz Core0 is setting up DMA transfers from I2S microphone
 and doing feature extraction (dc blocking -> preemphasis -> FFT -> power -> log -> Mel filterbank)
 in frames, nine frames a second. The core utilization is ~80%.
 Core1 is (almost) continuously performing NN inference and manages
-to do single inference in ~650ms. This is a little too slow, as words
-in between frames can be lost. Ideally this time should be at the very least 500ms.
+to do single inference in ~320ms.
 
 The microphone (INMP441) connections are as follows:
 
