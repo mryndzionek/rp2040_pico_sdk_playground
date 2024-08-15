@@ -178,9 +178,11 @@ int main()
         sha_rnn_norm(fbins[NUM_FRAMES - BRICK_SIZE], BRICK_SIZE);
         memmove(input, &input[CHUNK_SIZE - FRAME_OFFSET], FRAME_OFFSET * sizeof(float));
 
+        // Check if Core1 is ready for more work
         if (multicore_fifo_rvalid())
         {
             multicore_fifo_pop_blocking();
+            // Send a copy of the feature buffer to Core1
             memcpy(fbins_out, fbins, NUM_FRAMES * NUM_FILT * sizeof(float));
             multicore_fifo_push_blocking((uint32_t)fbins_out);
         }
