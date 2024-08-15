@@ -1,15 +1,19 @@
 # rp2040_pico_sdk_playground
 
+[![build](https://github.com/mryndzionek/rp2040_pico_sdk_playground/actions/workflows/build.yml/badge.svg)](https://github.com/mryndzionek/rp2040_pico_sdk_playground/actions/workflows/build.yml)
+
 ## Building
 
 ```
-git submodule --init --recursive
+git submodule update --init --recursive
 export PICO_SDK_PATH=/path/to/your/pico-sdk
 mkdir build
 cd build
 cmake ..
 make
 ```
+
+More complete info can be extracted from GitHub action [script](.github/workflows/build.yml).
 
 ## Applications
 

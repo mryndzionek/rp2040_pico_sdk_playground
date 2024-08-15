@@ -1,0 +1,51 @@
+name: build
+
+on:
+  push:
+    branches:    
+      - build
+jobs:
+  build:
+
+    env:
+      BUILD_TYPE: Release
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+    - name: Prepare
+      run: |
+        sudo apt-get update
+        sudo apt install cmake gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib qemu qemu-user qemu-system-arm
+
+    - name: Checkout
+      uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+
+    - name: Configure
+      run: |
+        git submodule update --init --recursive
+        git clone --branch 2.0.0 https://github.com/raspberrypi/pico-sdk.git external/pico-sdk
+      
+    - name: Build
+      run: |
+        python3 -m venv env
+        source env/bin/activate
+        pip install -r requirements.txt
+        cd external/tflite-micro
+        make -j4 -f tensorflow/lite/micro/tools/make/Makefile test_micro_speech_test
+        make -j4 -f tensorflow/lite/micro/tools/make/Makefile TARGET=cortex_m_qemu TARGET_ARCH=cortex-m0 OPTIMIZED_KERNEL_DIR=cmsis_nn BUILD_TYPE=default test_micro_speech_test
+        cd ../..
+        export PICO_SDK_PATH=../external/pico-sdk
+        mkdir build
+        cd build
+        cmake -DCMAKE_BUILD_TYPE=$BUILD_TYPE ..
+        make
+        pip freeze > requirements.txt
+
+    - uses: actions/upload-artifact@834a144ee995460fba8ed112a2fc961b36a5ec5a
+      with:
+        name: binaries
+        path: |
+          build/*.uf2
+

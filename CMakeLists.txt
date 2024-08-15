@@ -90,13 +90,13 @@ target_link_libraries(cmsis-nn PUBLIC pico_stdlib cmsis_core)
 add_library(tflitemicro STATIC IMPORTED)
 set_property(TARGET tflitemicro  PROPERTY
              IMPORTED_LOCATION "${CMAKE_CURRENT_LIST_DIR}/external/tflite-micro/\
-gen/cortex_m_qemu_cortex-m0plus_default/lib/\
+gen/cortex_m_qemu_cortex-m0_default/lib/\
 libtensorflow-microlite.a")
 
 target_link_libraries(tflitemicro INTERFACE cmsis-nn)
 
 set(TFLITE_MODELS_PATH "${CMAKE_CURRENT_LIST_DIR}/external/tflite-micro\
-/gen/cortex_m_qemu_cortex-m0plus_default/genfiles\
+/gen/cortex_m_qemu_cortex-m0_default/genfiles\
 /tensorflow/lite/micro/examples/micro_speech/models")
 
 add_executable(rpi_tflm_micro_speech_demo
