@@ -16,7 +16,7 @@ typedef float sha_rnn_rnn1_input_t[SHARNN_INPUT_DIM0][SHARNN_HIDD_DIM0];
 typedef float sha_rnn_fc_input_t[SHARNN_INPUT_DIM0][SHARNN_HIDD_DIM1];
 typedef float sha_rnn_output_t[SHARNN_INPUT_DIM0][SHARNN_OUTPUT_DIM];
 
-void sha_rnn_norm(sha_rnn_input_t input);
+void sha_rnn_norm(float *input, size_t num);
 void sha_rnn_rnn0_process(const sha_rnn_input_t input, sha_rnn_rnn1_input_t output);
 void sha_rnn_rnn1_process(const sha_rnn_rnn1_input_t input, sha_rnn_fc_input_t output);
 void sha_rnn_fc_process(const sha_rnn_fc_input_t input, sha_rnn_output_t output);

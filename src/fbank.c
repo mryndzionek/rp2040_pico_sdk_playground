@@ -26,13 +26,13 @@
 
 // clang-format off
 
-const uint8_t FILTERBANK_OFF[NUM_FILT] = 
+static const uint8_t FILTERBANK_OFF[NUM_FILT] = 
    { 1,  2,  4,  6,  9,  11,  14,  16,
      19,  23,  26,  30,  34,  39,  43,  49,
      54,  60,  67,  74,  81,  90,  98,  108,
      118,  129,  141,  154,  168,  184,  200,  217};
 
-const float FILTERBANK_MAT[NUM_FILT][FILTERBANK_LEN] = {
+static const float FILTERBANK_MAT[NUM_FILT][FILTERBANK_LEN] = {
    { 1.00000000e+00,  5.00000000e-01,  0.00000000e+00,  0.00000000e+00,  0.00000000e+00,  0.00000000e+00,  0.00000000e+00,  0.00000000e+00,
      0.00000000e+00,  0.00000000e+00,  0.00000000e+00,  0.00000000e+00,  0.00000000e+00,  0.00000000e+00,  0.00000000e+00,  0.00000000e+00,
      0.00000000e+00,  0.00000000e+00,  0.00000000e+00,  0.00000000e+00,  0.00000000e+00,  0.00000000e+00,  0.00000000e+00,  0.00000000e+00,
@@ -195,7 +195,7 @@ const float FILTERBANK_MAT[NUM_FILT][FILTERBANK_LEN] = {
      3.33333333e-01,  2.85714286e-01,  2.38095238e-01,  1.90476190e-01,  1.42857143e-01,  9.52380952e-02,  4.76190476e-02,  0.00000000e+00},
 };
 
-const float FFT_WINDOW[FRAME_LEN] = {
+static const float FFT_WINDOW[FRAME_LEN] = {
     8.000000e-02, 8.005703e-02, 8.022812e-02, 8.051322e-02, 8.091226e-02, 8.142514e-02, 8.205173e-02, 8.279189e-02,
     8.364542e-02, 8.461211e-02, 8.569173e-02, 8.688400e-02, 8.818864e-02, 8.960531e-02, 9.113366e-02, 9.277333e-02,
     9.452389e-02, 9.638492e-02, 9.835596e-02, 1.004365e-01, 1.026261e-01, 1.049241e-01, 1.073300e-01, 1.098432e-01,
@@ -290,7 +290,6 @@ static void powspec(const float input[FRAME_LEN], float output[NUM_FFT_BINS])
     {
         output[i] *= 1.0f / NUM_FFT;
         output[i] *= output[i];
-        // output[i] *= 1.0f / NUM_FFT; // CMSIS does the scaling, but in a weird way and we need to adjust
     }
 }
 
@@ -367,30 +366,6 @@ void fbank(float *input, float (*output)[NUM_FILT], size_t size)
         }
         frame_num++;
     }
-}
-
-void fbank_print_min_max(float input[NUM_FRAMES][NUM_FILT])
-{
-    float min_v = 100.0;
-    float max_v = -100.0;
-
-    for (size_t i = 0; i < NUM_FRAMES; i++)
-    {
-        for (size_t j = 0; j < NUM_FILT; j++)
-        {
-            if (input[i][j] < min_v)
-            {
-                min_v = input[i][j];
-            }
-
-            if (input[i][j] > max_v)
-            {
-                max_v = input[i][j];
-            }
-        }
-    }
-
-    printf("Min: %f;  Max: %f\n", min_v, max_v);
 }
 
 char const *const fbank_label_idx_to_str(size_t label)

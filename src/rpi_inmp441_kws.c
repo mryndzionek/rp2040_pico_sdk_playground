@@ -34,9 +34,9 @@ static float input[CHUNK_SIZE] = {0.0};
 
 #define DISP_SIG_SIZE (sizeof(disp_signs) - 1)
 
-static const char disp_signs[] = " .,-+*&NM#";
+static const char disp_signs[] = " .,-:+*&NM#";
 
-char float2disp(float x)
+static char float2disp(float x)
 {
     int32_t i = ((x + 0.3) * (float)DISP_SIG_SIZE) / 3.5;
 
@@ -51,6 +51,32 @@ char float2disp(float x)
     return disp_signs[i];
 }
 
+void print_features(const float *feat, size_t w, size_t h)
+{
+    float v;
+    float vmin = *feat;
+    float vmax = *feat;
+
+    for (size_t i = 0; i < h; i++)
+    {
+        printf(" | ");
+        for (size_t j = 0; j < w; j++)
+        {
+            v = feat[w * i + j];
+            printf("%c", float2disp(v));
+            if (v > vmax)
+            {
+                vmax = v;
+            }
+            if (v < vmin)
+            {
+                vmin = v;
+            }
+        }
+        printf(" | %d %f %f\n", i, vmin, vmax);
+    }
+}
+
 static void(core1_entry)(void)
 {
     size_t debounce_count = 0;
@@ -61,34 +87,12 @@ static void(core1_entry)(void)
 
     while (true)
     {
-        multicore_fifo_push_blocking(true);
+        multicore_fifo_push_blocking(true); // Signal to Core0 that we're ready for more work
         float(*fbins)[NUM_FILT] = (float(*)[NUM_FILT])multicore_fifo_pop_blocking();
 
         uint32_t start_time = time_us_32();
-        sha_rnn_norm(fbins);
-
-        // for (size_t i = 0; i < NUM_FRAMES; i++)
-        // {
-        //     float vmin = 100.0f;
-        //     float vmax = -100.0f;
-
-        //     printf(" | ");
-        //     for (size_t j = 0; j < NUM_FILT; j++)
-        //     {
-        //         printf("%c", float2disp(fbins[i][j]));
-        //         if (fbins[i][j] > vmax)
-        //         {
-        //             vmax = fbins[i][j];
-        //         }
-        //         if (fbins[i][j] < vmin)
-        //         {
-        //             vmin = fbins[i][j];
-        //         }
-        //     }
-        //     printf(" | %d %f %f\n", i, vmin, vmax);
-        // }
-
         sha_rnn_process(fbins, &logit, &label);
+        // print_features((const float *)fbins, NUM_FILT, NUM_FRAMES);
         if (debounce_count)
         {
             if (label == 0)
@@ -153,60 +157,34 @@ int main()
     gpio_set_dir(LED_PIN, GPIO_OUT);
 
     printf("Starting\n");
-
     dma_channel_set_write_addr(DMA_CHANNEL, (void *)samples[bi], true);
-
-    uint32_t start_time;
-    uint32_t busy_time = 0;
-    size_t brick_num = 0;
 
     while (true)
     {
         gpio_put(LED_PIN, 1);
-        start_time = time_us_32();
         dma_channel_wait_for_finish_blocking(DMA_CHANNEL);
-        start_time = time_us_32();
         dma_channel_set_write_addr(DMA_CHANNEL, (void *)&samples[bi ^ 1][FRAME_OFFSET], true);
         gpio_put(LED_PIN, 0);
-
-        // float mmin = 100.0;
-        // float mmax = -100.0;
 
         for (size_t i = FRAME_OFFSET; i < CHUNK_SIZE; i++)
         {
             input[i] = (float)(samples[bi][i]);
-            input[i] /= (1UL << 28);
-
-            // if (input[i] > mmax)
-            // {
-            //     mmax = input[i];
-            // }
-            // if (input[i] < mmin)
-            // {
-            //     mmin = input[i];
-            // }
+            input[i] /= (1UL << 24);
+            input[i] *= 0.1;
         }
-        // printf("%f %f\n", mmin, mmax);
 
-        fbank(input, (float(*)[32])fbins[brick_num], CHUNK_READ_SIZE);
-        brick_num += BRICK_SIZE;
+        memmove(fbins[0], fbins[BRICK_SIZE], (NUM_FRAMES - BRICK_SIZE) * NUM_FILT * sizeof(float));
+        fbank(input, (float(*)[32])fbins[NUM_FRAMES - BRICK_SIZE], CHUNK_READ_SIZE);
+        sha_rnn_norm(fbins[NUM_FRAMES - BRICK_SIZE], BRICK_SIZE);
+        // print_features(fbins[brick_num], NUM_FILT, BRICK_SIZE);
         memmove(input, &input[CHUNK_SIZE - FRAME_OFFSET], FRAME_OFFSET * sizeof(float));
 
         if (multicore_fifo_rvalid())
         {
             multicore_fifo_pop_blocking();
-            memcpy(fbins_out, fbins, sizeof(fbins));
+            memcpy(fbins_out, fbins, NUM_FRAMES * NUM_FILT * sizeof(float));
             multicore_fifo_push_blocking((uint32_t)fbins_out);
-            // printf(" | Core 0: %.3f ms |\n", busy_time / 1000.0);
-            busy_time = 0;
         }
-
-        if (brick_num == NUM_FRAMES)
-        {
-            brick_num = 0;
-        }
-
-        busy_time += (time_us_32() - start_time);
         bi ^= 1;
     }
 }
