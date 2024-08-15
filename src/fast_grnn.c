@@ -188,13 +188,13 @@ void sha_rnn_process(const sha_rnn_input_t input, float *max_logit, size_t *max_
     sha_rnn_get_max_logit(output3, max_logit, max_idx);
 }
 
-void sha_rnn_norm(sha_rnn_input_t input)
+void sha_rnn_norm(float *input, size_t num)
 {
-    for (size_t i = 0; i < 99; i++)
+    for (size_t i = 0; i < num; i++)
     {
         for (size_t j = 0; j < 32; j++)
         {
-            input[i][j] = (input[i][j] - INPUT_MEANS[j]) / INPUT_STDEVS[j];
+            input[i * 32 + j] = (input[i * 32 + j] - INPUT_MEANS[j]) / INPUT_STDEVS[j];
         }
     }
 }

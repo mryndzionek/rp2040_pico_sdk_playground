@@ -9,7 +9,6 @@
 
 void fbank_init(void);
 void fbank(float *input, float (*output)[NUM_FILT], size_t size);
-void fbank_print_min_max(float input[NUM_FRAMES][NUM_FILT]);
 char const *const fbank_label_idx_to_str(size_t label);
 
 #endif // __FBANK_H__
