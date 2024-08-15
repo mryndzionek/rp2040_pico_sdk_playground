@@ -179,7 +179,7 @@ int main()
         {
             input[i] = (float)(samples[bi][i]);
             input[i] /= (1UL << 24);
-            input[i] *= 0.1;
+            input[i] *= 0.025;
         }
 
         memmove(fbins[0], fbins[BRICK_SIZE], (NUM_FRAMES - BRICK_SIZE) * NUM_FILT * sizeof(float));
