@@ -176,7 +176,6 @@ int main()
         memmove(fbins[0], fbins[BRICK_SIZE], (NUM_FRAMES - BRICK_SIZE) * NUM_FILT * sizeof(float));
         fbank(input, (float(*)[32])fbins[NUM_FRAMES - BRICK_SIZE], CHUNK_READ_SIZE);
         sha_rnn_norm(fbins[NUM_FRAMES - BRICK_SIZE], BRICK_SIZE);
-        // print_features(fbins[brick_num], NUM_FILT, BRICK_SIZE);
         memmove(input, &input[CHUNK_SIZE - FRAME_OFFSET], FRAME_OFFSET * sizeof(float));
 
         if (multicore_fifo_rvalid())

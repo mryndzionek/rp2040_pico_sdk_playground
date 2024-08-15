@@ -40,7 +40,6 @@ a WS2812 strip/matrix. Can be used to test strips/matrices.
 | One tap               | Toggle 3-minute timer              |
 | Two taps              | Toggle between 'Off' and 'Max Red' |
 | Three taps            | Cycle through presets              |
-| Four taps             | Activate "Doom flicker" feature    |
 
 
 ### rpi_inmp441_fft_demo
@@ -64,3 +63,20 @@ the microphone is transferred using PIO+DMA. With this configuration real-time
 speech analysis is possible (stride is 20ms at 16kHz sample rate and single inference takes ~19ms).
 
 https://github.com/mryndzionek/rp2040_pico_sdk_playground/assets/786191/eb2e00cd-766a-4e30-b1a9-e1439eccf761
+
+### rpi_inmp441_kws
+
+TinyML keyword spotting demo. The model is [Shallow RNN](https://github.com/microsoft/EdgeML/blob/master/docs/publications/Sha-RNN.pdf)
+architecture with a [FastGRNN](https://github.com/microsoft/EdgeML/blob/master/docs/publications/FastGRNN.pdf) cell converted
+to ~200 lines of C code.
+At 280MHz Core0 is setting up DMA transfers from I2S microphone
+and doing feature extraction (dc blocking -> preemphasis -> FFT -> power -> log -> Mel filterbank)
+in frames, eleven frames a second. The core utilization is ~80%.
+Core1 is (almost) continuously performing NN inference and manages
+to do single inference in ~650ms. This is a little too slow, as words
+in between frames can be lost. Ideally this time should be at the very least 500ms.
+
+The microphone (INMP441) connections are as follows:
+
+![pico_kws](images/pico_kws.png)
+
