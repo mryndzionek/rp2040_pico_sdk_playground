@@ -18,13 +18,13 @@
 #define INMP441_PIN_SD (16)
 #define INMP441_PIN_SCK (14)
 
-#define BRICK_SIZE (11)
-
 #define SAMPLERATE (16000UL)
 
 #define FRAME_OFFSET (FRAME_LEN - FRAME_STEP)
-#define CHUNK_SIZE ((BRICK_SIZE * FRAME_STEP) + (FRAME_OFFSET))
+#define CHUNK_SIZE ((SHARNN_BRICK_SIZE * FRAME_STEP) + (FRAME_OFFSET))
 #define CHUNK_READ_SIZE (CHUNK_SIZE - FRAME_OFFSET)
+
+#define UPDATE_TIME_MS (1000UL * CHUNK_READ_SIZE / SAMPLERATE)
 
 #define DMA_CHANNEL (0)
 #define DMA_CHANNEL_MASK (1u << DMA_CHANNEL)
@@ -92,7 +92,7 @@ static void(core1_entry)(void)
 
         uint32_t start_time = time_us_32();
         sha_rnn_process(fbins, &logit, &label);
-        // print_features((const float *)fbins, NUM_FILT, NUM_FRAMES);
+        // print_features((const float *)fbins, NUM_FILT, SHARNN_BRICK_SIZE);
         if (debounce_count)
         {
             if (label == 0)
@@ -102,7 +102,11 @@ static void(core1_entry)(void)
         }
         else
         {
-            printf(" | %.3f | Core 1: %.3f ms %f, %d %s |\n", time_us_32() / 1000.0, (time_us_32() - start_time) / 1000.0, logit, label, fbank_label_idx_to_str(label));
+            float t_ms = (time_us_32() - start_time) / 1000.0;
+            printf(" | %.3f | Core 1: inf. time: %.3f ms, util: %.2f%%, logit: %f, label: %d %s |\n",
+                   time_us_32() / 1000.0, t_ms, 100 * t_ms / UPDATE_TIME_MS,
+                   logit,
+                   label, fbank_label_idx_to_str(label));
             if (label > 0)
             {
                 if (logit >= 3.0)
@@ -117,14 +121,14 @@ static void(core1_entry)(void)
 
 static uint32_t core1_stack[8 * 1024UL];
 
-static float fbins_out[NUM_FRAMES][NUM_FILT];
+static float fbins_out[SHARNN_BRICK_SIZE][NUM_FILT];
 
 int main()
 {
     PIO pio = pio0;
     int sm;
     size_t bi = 0;
-    static float fbins[NUM_FRAMES][NUM_FILT];
+    static float fbins[SHARNN_BRICK_SIZE][NUM_FILT];
 
     stdio_init_all();
     set_sys_clock_khz(280000, true);
@@ -179,12 +183,11 @@ int main()
         {
             input[i] = (float)(samples[bi][i]);
             input[i] /= (1UL << 24);
-            input[i] *= 0.025;
+            input[i] *= 0.04;
         }
 
-        memmove(fbins[0], fbins[BRICK_SIZE], (NUM_FRAMES - BRICK_SIZE) * NUM_FILT * sizeof(float));
-        fbank(input, (float(*)[32])fbins[NUM_FRAMES - BRICK_SIZE], CHUNK_READ_SIZE);
-        sha_rnn_norm(fbins[NUM_FRAMES - BRICK_SIZE], BRICK_SIZE);
+        fbank(input, (float(*)[32])fbins, CHUNK_READ_SIZE);
+        sha_rnn_norm((float *)fbins, SHARNN_BRICK_SIZE);
         memmove(input, &input[CHUNK_SIZE - FRAME_OFFSET], FRAME_OFFSET * sizeof(float));
 
         // Check if Core1 is ready for more work
@@ -192,8 +195,12 @@ int main()
         {
             multicore_fifo_pop_blocking();
             // Send a copy of the feature buffer to Core1
-            memcpy(fbins_out, fbins, NUM_FRAMES * NUM_FILT * sizeof(float));
+            memcpy(fbins_out, fbins, SHARNN_BRICK_SIZE * NUM_FILT * sizeof(float));
             multicore_fifo_push_blocking((uint32_t)fbins_out);
+        }
+        else
+        {
+            printf("Core1 not keeping up!\n");
         }
         bi ^= 1;
     }

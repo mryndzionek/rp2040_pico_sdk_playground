@@ -31,186 +31,186 @@ static inline float sigmoidf(float n)
     return (1 / (1 + powf(EULER_NUMBER_F, -n)));
 }
 
-static void rnn0_process(const float input[9][32], const float hidden[9][64], float output[9][64])
+static void rnn0_process(const float input[32], const float hidden[64], float output[64])
 {
     float z;
     float c;
 
-    for (size_t t = 0; t < 9; t++)
     {
+        float tmp[8] = {0.0};
+
+        for (size_t j = 0; j < 8; j++)
         {
-            float tmp[8] = {0.0};
-
-            for (size_t j = 0; j < 8; j++)
+            for (size_t i = 0; i < 32; i++)
             {
-                for (size_t i = 0; i < 32; i++)
-                {
-                    tmp[j] += GRNN0_W1[j][i] * input[t][i];
-                }
-            }
-
-            for (size_t i = 0; i < 8; i++)
-            {
-                for (size_t j = 0; j < 64; j++)
-                {
-                    output[t][j] += GRNN0_W2[j][i] * tmp[i];
-                }
+                tmp[j] += GRNN0_W1[j][i] * input[i];
             }
         }
 
+        for (size_t i = 0; i < 8; i++)
         {
-            float tmp[16] = {0.0};
-
-            for (size_t j = 0; j < 16; j++)
+            for (size_t j = 0; j < 64; j++)
             {
-                for (size_t i = 0; i < 64; i++)
-                {
-                    tmp[j] += GRNN0_U1[j][i] * hidden[t][i];
-                }
+                output[j] += GRNN0_W2[j][i] * tmp[i];
             }
+        }
+    }
 
-            for (size_t i = 0; i < 16; i++)
+    {
+        float tmp[16] = {0.0};
+
+        for (size_t j = 0; j < 16; j++)
+        {
+            for (size_t i = 0; i < 64; i++)
             {
-                for (size_t j = 0; j < 64; j++)
-                {
-                    output[t][j] += GRNN0_U2[j][i] * tmp[i];
-                }
+                tmp[j] += GRNN0_U1[j][i] * hidden[i];
             }
         }
 
-        for (size_t j = 0; j < 64; j++)
+        for (size_t i = 0; i < 16; i++)
         {
-            z = output[t][j] + GRNN0_BIAS_GATE[j];
-            z = sigmoidf(z);
-            c = output[t][j] + GRNN0_BIAS_UPDATE[j];
-            c = tanhf(c);
-
-            output[t][j] = z * hidden[t][j] + (sigmoidf(GRNN0_ZETA) * (1.0 - z) + sigmoidf(GRNN0_NU)) * c;
+            for (size_t j = 0; j < 64; j++)
+            {
+                output[j] += GRNN0_U2[j][i] * tmp[i];
+            }
         }
+    }
+
+    for (size_t j = 0; j < 64; j++)
+    {
+        z = output[j] + GRNN0_BIAS_GATE[j];
+        z = sigmoidf(z);
+        c = output[j] + GRNN0_BIAS_UPDATE[j];
+        c = tanhf(c);
+
+        output[j] = z * hidden[j] + (sigmoidf(GRNN0_ZETA) * (1.0 - z) + sigmoidf(GRNN0_NU)) * c;
     }
 }
 
 void sha_rnn_rnn0_process(const sha_rnn_input_t input, sha_rnn_rnn1_input_t output)
 {
-    float frame[9][32] = {{0.0f}};
-    float hidden[9][64] = {{0.0f}};
+    float hidden[64] = {0.0f};
 
     for (size_t k = 0; k < SHARNN_BRICK_SIZE; k++)
     {
-        for (size_t i = 0; i < 9; i++)
+        memset(output, 0, sizeof(float) * 64);
+        rnn0_process(input[k], hidden, output);
+        memcpy(hidden, output, sizeof(float) * 64);
+    }
+}
+
+static void rnn1_process(const float input[64], const float hidden[32], float output[32])
+{
+    float z;
+    float c;
+
+    {
+        float tmp[16] = {0.0};
+
+        for (size_t j = 0; j < 16; j++)
         {
-            const float *src = input[k + (i * SHARNN_BRICK_SIZE)];
-            for (size_t j = 0; j < 32; j++)
+            for (size_t i = 0; i < 64; i++)
             {
-                frame[i][j] = src[j];
+                tmp[j] += GRNN1_W1[j][i] * input[i];
             }
         }
 
-        memset(output, 0, sizeof(float) * 9 * 64);
-        rnn0_process(frame, hidden, output);
-        memcpy(hidden, output, sizeof(float) * 9 * 64);
+        for (size_t i = 0; i < 16; i++)
+        {
+            for (size_t j = 0; j < 32; j++)
+            {
+                output[j] += GRNN1_W2[j][i] * tmp[i];
+            }
+        }
+    }
+
+    float tmp[8] = {0.0};
+
+    for (size_t j = 0; j < 8; j++)
+    {
+        for (size_t i = 0; i < 32; i++)
+        {
+            tmp[j] += GRNN1_U1[j][i] * hidden[i];
+        }
+    }
+    for (size_t i = 0; i < 8; i++)
+    {
+        for (size_t j = 0; j < 32; j++)
+        {
+            output[j] += GRNN1_U2[j][i] * tmp[i];
+        }
+    }
+
+    for (size_t j = 0; j < 32; j++)
+    {
+        z = output[j] + GRNN1_BIAS_GATE[j];
+        z = sigmoidf(z);
+        c = output[j] + GRNN1_BIAS_UPDATE[j];
+        c = tanhf(c);
+
+        output[j] = z * hidden[j] + (sigmoidf(GRNN1_ZETA) * (1.0 - z) + sigmoidf(GRNN1_NU)) * c;
     }
 }
 
 void sha_rnn_rnn1_process(const sha_rnn_rnn1_input_t input, sha_rnn_fc_input_t output)
 {
-    float z;
-    float c;
+    static float rnn1_input_hist[9][64];
+    static size_t rnn1_hist_idx;
 
-    for (size_t t = 0; t < 9; t++)
+    float rnn1_hidden[32] = {0.0};
+
+    memcpy(rnn1_input_hist[rnn1_hist_idx], input, sizeof(sha_rnn_rnn1_input_t));
+    memset(output, 0, sizeof(sha_rnn_fc_input_t));
+
+    for (size_t i = 0; i < 9; i++)
     {
-        {
-            float tmp[16] = {0.0};
+        size_t j = (rnn1_hist_idx + 1 + i) % 9;
+        rnn1_process(rnn1_input_hist[j], rnn1_hidden, output);
+        memcpy(rnn1_hidden, output, sizeof(sha_rnn_fc_input_t));
+    }
 
-            for (size_t j = 0; j < 16; j++)
-            {
-                for (size_t i = 0; i < 64; i++)
-                {
-                    tmp[j] += GRNN1_W1[j][i] * input[t][i];
-                }
-            }
+    rnn1_hist_idx++;
 
-            for (size_t i = 0; i < 16; i++)
-            {
-                for (size_t j = 0; j < 32; j++)
-                {
-                    output[t][j] += GRNN1_W2[j][i] * tmp[i];
-                }
-            }
-        }
-
-        if (t > 0)
-        {
-            float tmp[8] = {0.0};
-
-            for (size_t j = 0; j < 8; j++)
-            {
-                for (size_t i = 0; i < 32; i++)
-                {
-                    tmp[j] += GRNN1_U1[j][i] * output[t - 1][i];
-                }
-            }
-            for (size_t i = 0; i < 8; i++)
-            {
-                for (size_t j = 0; j < 32; j++)
-                {
-                    output[t][j] += GRNN1_U2[j][i] * tmp[i];
-                }
-            }
-        }
-
-        for (size_t j = 0; j < 32; j++)
-        {
-            z = output[t][j] + GRNN1_BIAS_GATE[j];
-            z = sigmoidf(z);
-            c = output[t][j] + GRNN1_BIAS_UPDATE[j];
-            c = tanhf(c);
-
-            output[t][j] = z * (t > 0 ? output[t - 1][j] : 0.0f) + (sigmoidf(GRNN1_ZETA) * (1.0 - z) + sigmoidf(GRNN1_NU)) * c;
-        }
+    if (rnn1_hist_idx == 9)
+    {
+        rnn1_hist_idx = 0;
     }
 }
 
 void sha_rnn_fc_process(const sha_rnn_fc_input_t input, sha_rnn_output_t output)
 {
-    memset(output, 0, 9 * 6 * sizeof(float));
+    memset(output, 0, 6 * sizeof(float));
 
-    for (size_t t = 0; t < 9; t++)
+    for (size_t j = 0; j < 6; j++)
     {
-        for (size_t j = 0; j < 6; j++)
+        for (size_t i = 0; i < 32; i++)
         {
-            for (size_t i = 0; i < 32; i++)
-            {
-                output[t][j] += input[t][i] * FC_W[j][i];
-            }
-            output[t][j] += FC_B[j];
+            output[j] += input[i] * FC_W[j][i];
         }
+        output[j] += FC_B[j];
     }
 }
 
 void sha_rnn_get_max_logit(const sha_rnn_output_t input, float *max_logit, size_t *max_idx)
 {
-    *max_logit = input[0][0];
+    *max_logit = input[0];
     *max_idx = 0;
 
-    for (size_t t = 0; t < 9; t++)
+    for (size_t j = 0; j < 6; j++)
     {
-        for (size_t j = 0; j < 6; j++)
+        if (input[j] > *max_logit)
         {
-            if (input[t][j] > *max_logit)
-            {
-                *max_logit = input[t][j];
-                *max_idx = j;
-            }
+            *max_logit = input[j];
+            *max_idx = j;
         }
     }
 }
 
 void sha_rnn_process(const sha_rnn_input_t input, float *max_logit, size_t *max_idx)
 {
-    float output[9][64] = {{0.0f}};
-    float output2[9][32] = {{0.0f}};
-    float output3[9][6] = {{0.0f}};
+    float output[64] = {0.0f};
+    float output2[32] = {0.0f};
+    float output3[6] = {0.0f};
 
     sha_rnn_rnn0_process(input, output);
     sha_rnn_rnn1_process(output, output2);

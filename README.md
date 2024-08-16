@@ -71,9 +71,8 @@ architecture with a [FastGRNN](https://github.com/microsoft/EdgeML/blob/master/d
 to ~200 lines of C code.
 At 280MHz Core0 is setting up DMA transfers from I2S microphone
 and doing feature extraction (`dc blocking` -> `preemphasis` -> `FFT` -> `power` -> `log` -> `Mel filterbank`)
-in frames, nine frames a second. The core utilization is ~80%.
-Core1 is (almost) continuously performing NN inference and manages
-to do single inference in ~320ms.
+in frames, nine frames a second. The core utilization is ~60%.
+Core1 every 105ms does NN inference which takes about 46ms (42% core utilization).
 
 The microphone (INMP441) connections are as follows:
 
