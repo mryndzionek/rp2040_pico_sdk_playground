@@ -183,10 +183,10 @@ int main()
         {
             input[i] = (float)(samples[bi][i]);
             input[i] /= (1UL << 24);
-            input[i] *= 0.04;
+            input[i] *= 0.1;
         }
 
-        fbank(input, (float(*)[32])fbins, CHUNK_READ_SIZE);
+        fbank(input, (float(*)[32])fbins, CHUNK_SIZE);
         sha_rnn_norm((float *)fbins, SHARNN_BRICK_SIZE);
         memmove(input, &input[CHUNK_SIZE - FRAME_OFFSET], FRAME_OFFSET * sizeof(float));
 

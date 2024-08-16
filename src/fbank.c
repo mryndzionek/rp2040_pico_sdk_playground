@@ -323,20 +323,11 @@ void fbank(float *input, float (*output)[NUM_FILT], size_t size)
 
     for (size_t i = 0; i < size; i += FRAME_STEP)
     {
-        if (frame_num >= 11)
-        {
-            break;
-        }
+        assert((i + FRAME_LEN) <= size);
 
         const float *frame_start = &input[i];
 
-        size_t fr = FRAME_LEN;
-        if ((i + FRAME_LEN) >= size)
-        {
-            fr = size - i;
-        }
-
-        for (size_t j = 0; j < fr; j++)
+        for (size_t j = 0; j < FRAME_LEN; j++)
         {
             frame[j] = frame_start[j] * FFT_WINDOW[j];
         }
@@ -361,6 +352,12 @@ void fbank(float *input, float (*output)[NUM_FILT], size_t size)
                 output[frame_idx][j] = F_EPS;
             }
             output[frame_idx][j] = logf(output[frame_idx][j] + 1.0e-10);
+        }
+
+        if((i + FRAME_LEN) == size)
+        {
+          assert(frame_num == 10);
+          break;
         }
         frame_num++;
     }
