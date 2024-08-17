@@ -31,6 +31,8 @@
 
 #define DISP_SIG_SIZE (sizeof(disp_signs) - 1)
 
+// #define DEBUG_PRINTF
+
 static int32_t samples[2][CHUNK_SIZE];
 static float input[CHUNK_SIZE] = {0.0};
 
@@ -89,8 +91,9 @@ static void(core1_entry)(void)
     {
         multicore_fifo_push_blocking(true); // Signal to Core0 that we're ready for more work
         float(*fbins)[NUM_FILT] = (float(*)[NUM_FILT])multicore_fifo_pop_blocking();
-
+#ifdef DEBUG_PRINTF
         uint32_t start_time = time_us_32();
+#endif
         sha_rnn_process(fbins, &logit, &label);
         // print_features((const float *)fbins, NUM_FILT, SHARNN_BRICK_SIZE);
         if (debounce_count)
@@ -102,11 +105,13 @@ static void(core1_entry)(void)
         }
         else
         {
+#ifdef DEBUG_PRINTF
             float t_ms = (time_us_32() - start_time) / 1000.0;
             printf(" | %.3f | Core 1: inf. time: %.3f ms, util: %.2f%%, logit: %f, label: %d %s |\n",
                    time_us_32() / 1000.0, t_ms, 100 * t_ms / UPDATE_TIME_MS,
                    logit,
                    label, fbank_label_idx_to_str(label));
+#endif
             if (label > 0)
             {
                 if (logit >= 3.0)
@@ -176,6 +181,9 @@ int main()
     {
         gpio_put(LED_PIN, 1);
         dma_channel_wait_for_finish_blocking(DMA_CHANNEL);
+#ifdef DEBUG_PRINTF
+        uint32_t start_time = time_us_32();
+#endif
         dma_channel_set_write_addr(DMA_CHANNEL, (void *)&samples[bi ^ 1][FRAME_OFFSET], true);
         gpio_put(LED_PIN, 0);
 
@@ -183,12 +191,18 @@ int main()
         {
             input[i] = (float)(samples[bi][i]);
             input[i] /= (1UL << 24);
-            input[i] *= 0.1;
+            input[i] *= 0.05;
         }
 
         fbank(input, (float(*)[32])fbins, CHUNK_SIZE);
         sha_rnn_norm((float *)fbins, SHARNN_BRICK_SIZE);
         memmove(input, &input[CHUNK_SIZE - FRAME_OFFSET], FRAME_OFFSET * sizeof(float));
+
+#ifdef DEBUG_PRINTF
+        float t_ms = (time_us_32() - start_time) / 1000.0;
+        printf(" | %.3f | Core 0: proc. time: %.3f ms, util: %.2f%% |\n",
+               time_us_32() / 1000.0, t_ms, 100 * t_ms / UPDATE_TIME_MS);
+#endif
 
         // Check if Core1 is ready for more work
         if (multicore_fifo_rvalid())
