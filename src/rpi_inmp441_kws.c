@@ -96,6 +96,13 @@ static void(core1_entry)(void)
 #endif
         sha_rnn_process(fbins, &logit, &label);
         // print_features((const float *)fbins, NUM_FILT, SHARNN_BRICK_SIZE);
+#ifdef DEBUG_PRINTF
+        float t_ms = (time_us_32() - start_time) / 1000.0;
+        printf(" | %.3f | Core 1: inf. time: %.3f ms, util: %.2f%%, logit: %f, label: %d %s |\n",
+               time_us_32() / 1000.0, t_ms, 100 * t_ms / UPDATE_TIME_MS,
+               logit,
+               label, fbank_label_idx_to_str(label));
+#endif
         if (debounce_count)
         {
             if (label == 0)
@@ -105,13 +112,6 @@ static void(core1_entry)(void)
         }
         else
         {
-#ifdef DEBUG_PRINTF
-            float t_ms = (time_us_32() - start_time) / 1000.0;
-            printf(" | %.3f | Core 1: inf. time: %.3f ms, util: %.2f%%, logit: %f, label: %d %s |\n",
-                   time_us_32() / 1000.0, t_ms, 100 * t_ms / UPDATE_TIME_MS,
-                   logit,
-                   label, fbank_label_idx_to_str(label));
-#endif
             if (label > 0)
             {
                 if (logit >= 3.0)
@@ -191,7 +191,7 @@ int main()
         {
             input[i] = (float)(samples[bi][i]);
             input[i] /= (1UL << 24);
-            input[i] *= 0.05;
+            input[i] *= 0.075;
         }
 
         fbank(input, (float(*)[32])fbins, CHUNK_SIZE);
