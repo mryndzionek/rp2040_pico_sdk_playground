@@ -124,8 +124,6 @@ static void(core1_entry)(void)
     }
 }
 
-static uint32_t core1_stack[8 * 1024UL];
-
 static float fbins_out[SHARNN_BRICK_SIZE][NUM_FILT];
 
 int main()
@@ -147,7 +145,7 @@ int main()
     }
     printf("\n");
 
-    multicore_launch_core1_with_stack(core1_entry, core1_stack, sizeof(core1_stack));
+    multicore_launch_core1(core1_entry);
 
     fbank_init();
 

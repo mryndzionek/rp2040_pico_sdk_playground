@@ -271,8 +271,10 @@ static void preemphasis(float *input, size_t len)
 
 static void powspec(const float input[FRAME_LEN], float output[NUM_FFT_BINS])
 {
-    float32_t tmp[NUM_FFT] = {0.0f};
-    float32_t out[NUM_FFT];
+    static float32_t tmp[NUM_FFT];
+    static float32_t out[NUM_FFT];
+
+    memset(tmp, 0, sizeof(tmp));
 
     for (size_t i = 0; i < FRAME_LEN; i++)
     {

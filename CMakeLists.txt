@@ -163,6 +163,6 @@ target_link_libraries(rpi_inmp441_kws
         CMSISDSP
         )
 
-#target_compile_definitions(rpi_inmp441_kws PRIVATE PICO_STACK_SIZE=0x1000)
+target_compile_definitions(rpi_inmp441_kws PRIVATE PICO_CORE1_STACK_SIZE=0x1000)
 pico_add_extra_outputs(rpi_inmp441_kws)
 

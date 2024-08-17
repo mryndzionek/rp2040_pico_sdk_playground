@@ -163,9 +163,9 @@ void sha_rnn_get_max_logit(const sha_rnn_output_t input, float *max_logit, size_
 
 void sha_rnn_process(const sha_rnn_input_t input, float *max_logit, size_t *max_idx)
 {
-    float output[64] = {0.0f};
-    float output2[32] = {0.0f};
-    float output3[6] = {0.0f};
+    static float output[64] = {0.0f};
+    static float output2[32] = {0.0f};
+    static float output3[6] = {0.0f};
 
     sha_rnn_rnn0_process(input, output);
     sha_rnn_rnn1_process(output, output2);
