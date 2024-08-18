@@ -86,3 +86,4 @@ The microphone (INMP441) connections are as follows:
 
 [tinygl_1b](https://github.com/meadiode/tinygl_1b) test app (dithered `glxgears`)
 
+https://github.com/user-attachments/assets/f5792bb0-ef3a-4614-b5db-952d4316804c
