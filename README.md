@@ -82,3 +82,7 @@ The microphone (INMP441) connections are as follows:
 
 ![pico_kws](images/pico_kws.png)
 
+### rpi_lcd_3d_test
+
+[tinygl_1b](https://github.com/meadiode/tinygl_1b) test app (dithered `glxgears`)
+

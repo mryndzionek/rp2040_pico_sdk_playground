@@ -166,3 +166,56 @@ target_link_libraries(rpi_inmp441_kws
 target_compile_definitions(rpi_inmp441_kws PRIVATE PICO_CORE1_STACK_SIZE=0x1000)
 pico_add_extra_outputs(rpi_inmp441_kws)
 
+set(TINYGL_SOURCES
+    external/tinygl_1b/src/api.c
+    external/tinygl_1b/src/clear.c
+    external/tinygl_1b/src/init.c
+    external/tinygl_1b/src/list.c
+    external/tinygl_1b/src/memory.c
+    external/tinygl_1b/src/msghandling.c
+    external/tinygl_1b/src/specbuf.c
+    external/tinygl_1b/src/vertex.c
+    external/tinygl_1b/src/zmath.c
+    external/tinygl_1b/src/arrays.c
+    external/tinygl_1b/src/clip.c
+    external/tinygl_1b/src/get.c
+    external/tinygl_1b/src/image_util.c
+    external/tinygl_1b/src/light.c
+    external/tinygl_1b/src/matrix.c
+    external/tinygl_1b/src/misc.c
+    external/tinygl_1b/src/select.c
+    external/tinygl_1b/src/texture.c
+    external/tinygl_1b/src/zbuffer.c
+    external/tinygl_1b/src/zline.c
+    external/tinygl_1b/src/ztriangle.c    
+    external/tinygl_1b/src/zraster.c    
+    external/tinygl_1b/src/ztext.c    
+)
+
+add_executable(rpi_lcd_3d_test
+        src/rpi_lcd_3d_test.c
+        src/u8g2_ili9486_driver.c
+        src/gears.c
+        ${TINYGL_SOURCES}
+        )
+
+target_include_directories(rpi_lcd_3d_test
+        PRIVATE external/tinygl_1b/src external/tinygl_1b/include
+)
+
+target_compile_options(rpi_lcd_3d_test PRIVATE -Wno-unused-function
+                                               -Wno-unused-variable
+                                               -Wno-parentheses
+                                               -Wno-unused-but-set-variable)
+
+pico_generate_pio_header(rpi_lcd_3d_test ${CMAKE_CURRENT_LIST_DIR}/src/ili9486_lcd_8bit_data.pio)
+
+target_link_libraries(rpi_lcd_3d_test
+        pico_stdlib
+        hardware_irq
+        hardware_pwm
+        hardware_pio
+        hardware_dma
+        u8g2)
+
+pico_add_extra_outputs(rpi_lcd_3d_test)

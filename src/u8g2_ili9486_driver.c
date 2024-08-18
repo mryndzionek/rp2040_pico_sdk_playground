@@ -11,7 +11,7 @@
 
 #include "ili9486_lcd_8bit_data.pio.h"
 
-#define BACKLIGHT_PIN (15)
+#define BACKLIGHT_PIN (17)
 
 #define LCD_WR_PIN (12)
 #define LCD_D0_PIN (2)
@@ -175,15 +175,15 @@ static uint8_t _gpio_and_delay(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void 
     return 0;
 }
 
+uint8_t u8g2_fbuf[19200];
 static uint8_t *u8g2_m_40_60_f(uint8_t *page_cnt)
 {
 #ifdef U8G2_USE_DYNAMIC_ALLOC
     *page_cnt = 40;
     return 0;
 #else
-    static uint8_t buf[19200];
     *page_cnt = 40;
-    return buf;
+    return u8g2_fbuf;
 #endif
 }
 

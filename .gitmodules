@@ -10,3 +10,6 @@
 [submodule "external/tflite-micro"]
 	path = external/tflite-micro
 	url = https://github.com/tensorflow/tflite-micro.git
+[submodule "external/tinygl_1b"]
+	path = external/tinygl_1b
+	url = git@github.com:meadiode/tinygl_1b.git
