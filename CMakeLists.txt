@@ -192,30 +192,54 @@ set(TINYGL_SOURCES
     external/tinygl_1b/src/ztext.c    
 )
 
+add_library(
+    tinygl_1b
+    ${TINYGL_SOURCES}
+)
+
+target_include_directories(tinygl_1b
+        PRIVATE external/tinygl_1b/src
+        PUBLIC external/tinygl_1b/include
+)
+
+target_compile_options(tinygl_1b PUBLIC -Wno-unused-function
+                                        -Wno-unused-variable
+                                        -Wno-parentheses
+                                        -Wno-unused-but-set-variable)
+
 add_executable(rpi_lcd_3d_test
         src/rpi_lcd_3d_test.c
         src/u8g2_ili9486_driver.c
         src/gears.c
-        ${TINYGL_SOURCES}
         )
-
-target_include_directories(rpi_lcd_3d_test
-        PRIVATE external/tinygl_1b/src external/tinygl_1b/include
-)
-
-target_compile_options(rpi_lcd_3d_test PRIVATE -Wno-unused-function
-                                               -Wno-unused-variable
-                                               -Wno-parentheses
-                                               -Wno-unused-but-set-variable)
 
 pico_generate_pio_header(rpi_lcd_3d_test ${CMAKE_CURRENT_LIST_DIR}/src/ili9486_lcd_8bit_data.pio)
 
-target_link_libraries(rpi_lcd_3d_test
+target_link_libraries(rpi_lcd_3d_test PRIVATE
         pico_stdlib
         hardware_irq
         hardware_pwm
         hardware_pio
         hardware_dma
-        u8g2)
+        u8g2
+        tinygl_1b)
 
 pico_add_extra_outputs(rpi_lcd_3d_test)
+
+add_executable(rpi_lcd_3d_skull_test
+        src/rpi_lcd_3d_skull_test.c
+        src/u8g2_ili9486_driver.c
+        )
+
+pico_generate_pio_header(rpi_lcd_3d_skull_test ${CMAKE_CURRENT_LIST_DIR}/src/ili9486_lcd_8bit_data.pio)
+
+target_link_libraries(rpi_lcd_3d_skull_test PRIVATE
+        pico_stdlib
+        hardware_irq
+        hardware_pwm
+        hardware_pio
+        hardware_dma
+        u8g2
+        tinygl_1b)
+
+pico_add_extra_outputs(rpi_lcd_3d_skull_test)
