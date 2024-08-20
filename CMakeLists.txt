@@ -166,6 +166,30 @@ target_link_libraries(rpi_inmp441_kws
 target_compile_definitions(rpi_inmp441_kws PRIVATE PICO_CORE1_STACK_SIZE=0x1000)
 pico_add_extra_outputs(rpi_inmp441_kws)
 
+add_executable(rpi_inmp441_kws_lcd
+        src/rpi_inmp441_kws_lcd.c
+        src/fbank.c
+        src/fast_grnn.c
+        src/u8g2_ili9486_driver.c
+        )
+
+pico_generate_pio_header(rpi_inmp441_kws_lcd ${CMAKE_CURRENT_LIST_DIR}/src/inmp441.pio)
+pico_generate_pio_header(rpi_inmp441_kws_lcd ${CMAKE_CURRENT_LIST_DIR}/src/ili9486_lcd_8bit_data.pio)
+
+target_link_libraries(rpi_inmp441_kws_lcd
+        pico_stdlib
+        pico_rand
+        pico_multicore
+        hardware_pio
+        hardware_dma
+        hardware_pwm
+        CMSISDSP
+        u8g2
+        )
+
+target_compile_definitions(rpi_inmp441_kws_lcd PRIVATE PICO_CORE1_STACK_SIZE=0x1000)
+pico_add_extra_outputs(rpi_inmp441_kws_lcd)
+
 set(TINYGL_SOURCES
     external/tinygl_1b/src/api.c
     external/tinygl_1b/src/clear.c
