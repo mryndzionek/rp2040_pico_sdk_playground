@@ -83,7 +83,7 @@ static void(core1_entry)(void)
 {
     size_t debounce_count = 0;
     size_t label;
-    float logit;
+    float prob;
 
     printf("Core 1 running!\n");
 
@@ -94,13 +94,13 @@ static void(core1_entry)(void)
 #ifdef DEBUG_PRINTF
         uint32_t start_time = time_us_32();
 #endif
-        sha_rnn_process(fbins, &logit, &label);
+        sha_rnn_process(fbins, &prob, &label);
         // print_features((const float *)fbins, NUM_FILT, SHARNN_BRICK_SIZE);
 #ifdef DEBUG_PRINTF
         float t_ms = (time_us_32() - start_time) / 1000.0;
-        printf(" | %.3f | Core 1: inf. time: %.3f ms, util: %.2f%%, logit: %f, label: %d %s |\n",
+        printf(" | %.3f | Core 1: inf. time: %.3f ms, util: %.2f%%, prob: %f, label: %d %s |\n",
                time_us_32() / 1000.0, t_ms, 100 * t_ms / UPDATE_TIME_MS,
-               logit,
+               prob,
                label, fbank_label_idx_to_str(label));
 #endif
         if (debounce_count)
@@ -114,7 +114,7 @@ static void(core1_entry)(void)
         {
             if (label > 0)
             {
-                if (logit >= 3.0)
+                if (prob >= 0.8)
                 {
                     printf(" | %.3f | Detected keyword: %s |\n", time_us_32() / 1000.0, fbank_label_idx_to_str(label));
                     debounce_count = 1;
