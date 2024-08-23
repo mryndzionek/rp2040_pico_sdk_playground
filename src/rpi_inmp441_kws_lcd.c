@@ -23,15 +23,15 @@
 
 #define SAMPLERATE (16000UL)
 
+#define CHUNK_READ_SIZE (SHARNN_BRICK_SIZE * FRAME_STEP)
 #define FRAME_OFFSET (FRAME_LEN - FRAME_STEP)
-#define CHUNK_SIZE ((SHARNN_BRICK_SIZE * FRAME_STEP) + (FRAME_OFFSET))
-#define CHUNK_READ_SIZE (CHUNK_SIZE - FRAME_OFFSET)
+#define CHUNK_SIZE (CHUNK_READ_SIZE + FRAME_OFFSET)
 
 #define UPDATE_TIME_MS (1000UL * CHUNK_READ_SIZE / SAMPLERATE)
 
 // #define DEBUG_PRINTF
 
-static int32_t samples[2][CHUNK_SIZE];
+static int32_t samples[2][CHUNK_READ_SIZE];
 static float input[CHUNK_SIZE] = {0.0};
 
 static u8g2_t u8g2;
@@ -160,19 +160,20 @@ int main()
 #ifdef DEBUG_PRINTF
         uint32_t start_time = time_us_32();
 #endif
-        dma_channel_set_write_addr(dma_ch, (void *)&samples[bi ^ 1][FRAME_OFFSET], true);
+        dma_channel_set_write_addr(dma_ch, (void *)samples[bi ^ 1], true);
         gpio_put(LED_PIN, 0);
 
-        for (size_t i = FRAME_OFFSET; i < CHUNK_SIZE; i++)
+        for (size_t i = 0; i < CHUNK_READ_SIZE; i++)
         {
-            input[i] = (float)(samples[bi][i]);
-            input[i] /= (1UL << 24);
-            input[i] *= 0.075;
+            input[FRAME_OFFSET + i] = (float)(samples[bi][i]);
+            input[FRAME_OFFSET + i] /= (1UL << 24);
+            input[FRAME_OFFSET + i] *= 0.075;
         }
 
+        fbank_prep(&input[FRAME_OFFSET], CHUNK_READ_SIZE);
         fbank(input, (float(*)[32])fbins, CHUNK_SIZE);
         sha_rnn_norm((float *)fbins, SHARNN_BRICK_SIZE);
-        memmove(input, &input[CHUNK_SIZE - FRAME_OFFSET], FRAME_OFFSET * sizeof(float));
+        memmove(input, &input[CHUNK_READ_SIZE], FRAME_OFFSET * sizeof(float));
 
         // Check if Core1 is ready for more work
         if (multicore_fifo_rvalid())
@@ -181,6 +182,7 @@ int main()
             // Send a copy of the feature buffer to Core1
             memcpy(fbins_out, fbins, SHARNN_BRICK_SIZE * NUM_FILT * sizeof(float));
             multicore_fifo_push_blocking((uint32_t)fbins_out);
+            
             if (label > 0)
             {
                 u8g2_DrawStr(&u8g2, (480 - 176) / 2, 220, fbank_label_idx_to_str(label));

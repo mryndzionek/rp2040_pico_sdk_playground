@@ -20,9 +20,9 @@
 
 #define SAMPLERATE (16000UL)
 
+#define CHUNK_READ_SIZE (SHARNN_BRICK_SIZE * FRAME_STEP)
 #define FRAME_OFFSET (FRAME_LEN - FRAME_STEP)
-#define CHUNK_SIZE ((SHARNN_BRICK_SIZE * FRAME_STEP) + (FRAME_OFFSET))
-#define CHUNK_READ_SIZE (CHUNK_SIZE - FRAME_OFFSET)
+#define CHUNK_SIZE (CHUNK_READ_SIZE + FRAME_OFFSET)
 
 #define UPDATE_TIME_MS (1000UL * CHUNK_READ_SIZE / SAMPLERATE)
 
@@ -33,7 +33,7 @@
 
 // #define DEBUG_PRINTF
 
-static int32_t samples[2][CHUNK_SIZE];
+static int32_t samples[2][CHUNK_READ_SIZE];
 static float input[CHUNK_SIZE] = {0.0};
 
 static const char disp_signs[] = " .,-:+*&NM#";
@@ -182,19 +182,20 @@ int main()
 #ifdef DEBUG_PRINTF
         uint32_t start_time = time_us_32();
 #endif
-        dma_channel_set_write_addr(DMA_CHANNEL, (void *)&samples[bi ^ 1][FRAME_OFFSET], true);
+        dma_channel_set_write_addr(DMA_CHANNEL, (void *)samples[bi ^ 1], true);
         gpio_put(LED_PIN, 0);
 
-        for (size_t i = FRAME_OFFSET; i < CHUNK_SIZE; i++)
+        for (size_t i = 0; i < CHUNK_READ_SIZE; i++)
         {
-            input[i] = (float)(samples[bi][i]);
-            input[i] /= (1UL << 24);
-            input[i] *= 0.075;
+            input[FRAME_OFFSET + i] = (float)(samples[bi][i]);
+            input[FRAME_OFFSET + i] /= (1UL << 24);
+            input[FRAME_OFFSET + i] *= 0.075;
         }
 
+        fbank_prep(&input[FRAME_OFFSET], CHUNK_READ_SIZE);
         fbank(input, (float(*)[32])fbins, CHUNK_SIZE);
         sha_rnn_norm((float *)fbins, SHARNN_BRICK_SIZE);
-        memmove(input, &input[CHUNK_SIZE - FRAME_OFFSET], FRAME_OFFSET * sizeof(float));
+        memmove(input, &input[CHUNK_READ_SIZE], FRAME_OFFSET * sizeof(float));
 
 #ifdef DEBUG_PRINTF
         float t_ms = (time_us_32() - start_time) / 1000.0;

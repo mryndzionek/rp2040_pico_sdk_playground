@@ -10,6 +10,7 @@
 #define NUM_LABELS (6)
 
 void fbank_init(void);
+void fbank_prep(float *input, size_t len);
 void fbank(float *input, float (*output)[NUM_FILT], size_t size);
 char const *const fbank_label_idx_to_str(size_t label);
 

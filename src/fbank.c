@@ -313,15 +313,18 @@ void fbank_init(void)
     (void)status;
 }
 
+void fbank_prep(float *input, size_t len)
+{
+    dcblock(input, len);
+    preemphasis(input, len);
+}
+
 static float frame[FRAME_LEN] = {0.0};
 static float power[NUM_FFT_BINS];
 
 void fbank(float *input, float (*output)[NUM_FILT], size_t size)
 {
     size_t frame_num = 0;
-
-    dcblock(input, size);
-    preemphasis(input, size);
 
     for (size_t i = 0; i < size; i += FRAME_STEP)
     {
