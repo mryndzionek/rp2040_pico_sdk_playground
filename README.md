@@ -76,7 +76,7 @@ in frames, nine frames a second.
 ![sharnn](https://github.com/mryndzionek/esp32s3_eye_kws_demo/blob/main/images/sharnn.png)
 
 The core utilization is ~70%.
-Core1 every 105ms does NN inference which takes about 90ms (80% core utilization).
+Core1 every 105ms does NN inference which takes about 85ms (77% core utilization).
 
 The microphone (INMP441) connections are as follows:
 

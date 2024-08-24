@@ -8,8 +8,6 @@
 #include "fastgrnn_rnn1_params.h"
 #include "fastgrnn_fc_params.h"
 
-#define EULER_NUMBER_F (2.71828182846f)
-
 // clang-format off
 
 const float INPUT_MEANS[32] = 
@@ -26,16 +24,16 @@ const float INPUT_STDEVS[32] =
 
 // clang-format on
 
-static inline float sigmoidf(float n)
+static inline float sigmoidf(float x)
 {
-    return (1 / (1 + powf(EULER_NUMBER_F, -n)));
+    return (tanhf(x / 2.0f) + 1.0f) / 2.0f;
 }
 
 static inline float expo(float y)
 {
     if (y > 80)
         y = 80;
-    return exp(y);
+    return expf(y);
 }
 
 static float softmax(const float *xs, size_t n, size_t len)
