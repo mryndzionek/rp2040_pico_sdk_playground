@@ -167,7 +167,7 @@ int main()
         {
             input[FRAME_OFFSET + i] = (float)(samples[bi][i]);
             input[FRAME_OFFSET + i] /= (1UL << 24);
-            input[FRAME_OFFSET + i] *= 0.075;
+            input[FRAME_OFFSET + i] *= 0.2;
         }
 
         fbank_prep(&input[FRAME_OFFSET], CHUNK_READ_SIZE);
