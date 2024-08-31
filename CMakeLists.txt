@@ -15,7 +15,7 @@ file(GLOB U8G2_SRCS
      "external/u8g2/csrc/*.c"
 )
 
-add_compile_options(-Wall -Werror -fdata-sections -ffunction-sections)
+add_compile_options(-Wall -fdata-sections -ffunction-sections)
 add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>)
 add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>)
 
@@ -267,3 +267,20 @@ target_link_libraries(rpi_lcd_3d_skull_test PRIVATE
         tinygl_1b)
 
 pico_add_extra_outputs(rpi_lcd_3d_skull_test)
+
+add_executable(rpi_oled_test
+        src/rpi_oled_test.c
+        )
+
+target_link_libraries(rpi_oled_test
+        pico_stdlib
+        hardware_irq
+        hardware_pwm
+        hardware_pio
+        hardware_dma
+        hardware_i2c
+        u8g2)
+
+pico_add_extra_outputs(rpi_oled_test)
+# pico_enable_stdio_usb(rpi_oled_test 1)
+# pico_enable_stdio_uart(rpi_oled_test 0)
