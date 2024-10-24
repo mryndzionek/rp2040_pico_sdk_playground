@@ -105,7 +105,7 @@ Button press longer than 2000ms activates the vibrato.
 
 Example recording:
 
-
+https://github.com/user-attachments/assets/413b416e-784e-427c-9fcf-bf2dd25ecf8b
 
 INMP441 microphone connections are like in the `rpi_inmp441_kws` application:
 
