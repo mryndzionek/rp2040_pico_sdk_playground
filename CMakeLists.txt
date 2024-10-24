@@ -284,3 +284,18 @@ target_link_libraries(rpi_oled_test
 pico_add_extra_outputs(rpi_oled_test)
 # pico_enable_stdio_usb(rpi_oled_test 1)
 # pico_enable_stdio_uart(rpi_oled_test 0)
+
+add_executable(pitchshifter
+        src/pitchshifter.c
+        )
+
+target_link_libraries(pitchshifter
+        pico_stdlib
+        hardware_irq
+        hardware_pwm
+        hardware_pio
+        hardware_dma)
+
+pico_generate_pio_header(pitchshifter ${CMAKE_CURRENT_LIST_DIR}/src/inmp441.pio)
+
+pico_add_extra_outputs(pitchshifter)

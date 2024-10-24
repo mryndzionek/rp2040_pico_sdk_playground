@@ -96,3 +96,25 @@ https://github.com/user-attachments/assets/f5792bb0-ef3a-4614-b5db-952d4316804c
 
 ![skull](images/skull.gif)
 
+### pitchshifter
+
+Real time /pitch shifter/voice changer/ application. Pitch shifting code generated in [Faust](https://faust.grame.fr/).
+As a bonus there are also vibrato and echo effects. Short button presses cycle through the pitch levels.
+Long button press between 500ms-2000ms activates and deactivates echo.
+Button press longer than 2000ms activates the vibrato.
+
+Example recording:
+
+
+
+INMP441 microphone connections are like in the `rpi_inmp441_kws` application:
+
+![pico_kws](images/pico_kws.png)
+
+Audio output via GPIO PWM pin with a low-pass filter:
+
+![pwm_audio](images/pwm_audio.png)
+
+LM386 or PAM8403 can be used to amplify further, to connect a speaker.
+A tact switch needs to be connected between `GP13` and `GND`.
+
