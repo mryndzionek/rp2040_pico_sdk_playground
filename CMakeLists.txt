@@ -299,3 +299,17 @@ target_link_libraries(pitchshifter
 pico_generate_pio_header(pitchshifter ${CMAKE_CURRENT_LIST_DIR}/src/inmp441.pio)
 
 pico_add_extra_outputs(pitchshifter)
+
+add_executable(bipbuffer_test
+        src/bipbuffer_test.c
+        src/bipbuffer.c
+        )
+
+target_link_libraries(bipbuffer_test
+        pico_stdlib
+        pico_multicore
+        hardware_irq
+        hardware_pio
+        hardware_dma)
+
+pico_add_extra_outputs(bipbuffer_test)
